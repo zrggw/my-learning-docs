@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工作区文档聚合阅读</title>
+
+<!-- Markdown 排版：GitHub 风格（明/暗两套，运行时切换） -->
+<link id="md-light"  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.css">
+<link id="md-dark"   rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-dark.css" disabled>
+<!-- 代码高亮：highlight.js 主题（明/暗两套） -->
+<link id="hl-light"  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css">
+<link id="hl-dark"   rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css" disabled>
+
+<style>
+  :root {
+    --bg: #f6f8fb; --text: #1c1e21; --muted: #8a8f98; --border: #e2e5ea;
+    --panel: #ffffff; --accent: #2563eb; --accent-soft: #eef2ff; --shadow: 0 1px 3px rgba(16,24,40,.08);
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --text: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --panel: #161b22; --accent: #58a6ff; --accent-soft: #1f2c3f; --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: var(--bg); color: var(--text); transition: background .2s, color .2s; }
+  a { color: var(--accent); }
+  /* 锚点跳转时避开粘性顶栏 */
+  h1, h2, h3 { scroll-margin-top: 80px; }
+
+  /* 顶栏 */
+  header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px;
+           padding: 14px 24px; color: #fff; background: linear-gradient(120deg, #2563eb, #7c3aed); box-shadow: var(--shadow); }
+  header h1 { margin: 0; font-size: 19px; font-weight: 700; }
+  .btn { border: 0; cursor: pointer; border-radius: 8px; padding: 7px 12px; font-size: 13px;
+         background: rgba(255,255,255,.18); color: #fff; }
+  .btn:hover { background: rgba(255,255,255,.28); }
+  .btn.on { background: rgba(255,255,255,.4); }
+  .controls { position: fixed; top: 70px; right: 18px; z-index: 25; display: flex; flex-direction: row; gap: 8px; }
+  .controls .btn { background: var(--panel); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12.5px; padding: 6px 11px; }
+  .controls .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .controls .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* 三栏布局：左目录 | 正文 | 右大纲 */
+  .layout { display: flex; min-height: calc(100vh - 58px); }
+  .toc { width: 280px; flex: 0 0 280px; padding: 16px 12px; border-right: 1px solid var(--border);
+         position: sticky; top: 58px; align-self: flex-start; max-height: calc(100vh - 58px); overflow: auto; background: var(--panel); }
+  .toc .search { width: 100%; padding: 8px 10px; margin-bottom: 10px; border: 1px solid var(--border);
+                 border-radius: 8px; font-size: 13px; background: var(--bg); color: var(--text); }
+  .toc a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--text); text-decoration: none; font-size: 13.5px; font-weight: 500; cursor: pointer; }
+  .toc a:hover { background: var(--accent-soft); }
+  .toc a.active { background: var(--accent-soft); color: var(--accent); }
+
+  .main { flex: 1; padding: 32px 44px; max-width: 1040px; min-width: 0; }
+  .doc { padding: 28px 34px; background: var(--panel); border: 1px solid var(--border);
+         border-radius: 14px; box-shadow: var(--shadow); }
+  .doc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+              border-bottom: 2px solid var(--accent); padding-bottom: 10px; margin-bottom: 16px; }
+  .doc-head h2 { margin: 0; font-size: 21px; }
+  .doc-head .file { font-size: 12px; color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
+
+  /* 右侧大纲 */
+  .outline { width: 250px; flex: 0 0 250px; padding: 4px 12px 16px; border-left: 1px solid var(--border);
+             position: sticky; top: 108px; align-self: flex-start; max-height: calc(100vh - 108px); overflow: auto; background: var(--panel);
+             transition: margin-right .2s; }
+  .outline.hidden { display: none; }
+  .outline-head { margin: 8px 6px 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .outline a { display: block; padding: 5px 8px; border-radius: 5px; color: var(--muted); text-decoration: none; font-size: 12.6px; border-left: 2px solid transparent; }
+  .outline a.lvl0 { font-weight: 600; color: var(--text); }
+  .outline a.lvl1 { padding-left: 22px; }
+  .outline a.lvl2 { padding-left: 34px; font-size: 12px; }
+  .outline a:hover { background: var(--accent-soft); }
+  .outline a.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-soft); }
+  .outline .hint { color: var(--muted); font-size: 12px; padding: 8px; }
+
+  /* Markdown 内容 */
+  .markdown-body { background: transparent !important; color: inherit !important; }
+  .markdown-body pre code.hljs { padding: 0; background: transparent !important; }
+
+  .status { color: var(--muted); font-size: 13px; padding: 4px 2px; }
+  .copy-btn { float: right; margin-left: 8px; font-size: 11px; color: var(--muted);
+              border: 1px solid var(--border); background: var(--bg); border-radius: 5px; padding: 2px 7px; cursor: pointer; }
+  .copy-btn:hover { color: var(--accent); }
+  #toTop { position: fixed; right: 22px; bottom: 22px; z-index: 30; border: 0; border-radius: 50%;
+           width: 42px; height: 42px; font-size: 18px; cursor: pointer; color: #fff; background: var(--accent);
+           box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .2s; }
+  #toTop.show { opacity: 1; pointer-events: auto; }
+  footer { padding: 14px 24px; color: var(--muted); font-size: 12px; }
+
+  @media (max-width: 1200px) { .outline { display: none; } }
+  @media (max-width: 860px) { .toc { width: 220px; flex-basis: 220px; } .main { padding: 20px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>📚 文档聚合</h1>
+</header>
+
+<div class="controls">
+  <button class="btn on" id="outlineToggle" title="显示/隐藏右侧大纲">📑 大纲</button>
+  <button class="btn" id="themeBtn" title="切换明暗主题">🌓</button>
+</div>
+
+<div class="layout">
+  <nav class="toc" id="toc">
+    <input class="search" id="tocFilter" type="search" placeholder="过滤文档…">
+    <div class="status" id="tocStatus">正在加载…</div>
+    <div id="tocList"></div>
+  </nav>
+
+  <main class="main" id="main"></main>
+
+  <aside class="outline" id="outline">
+    <div class="outline-head"><span>文档大纲</span></div>
+    <div id="outlineList"></div>
+  </aside>
+</div>
+
+<button id="toTop" title="回到顶部">↑</button>
+<footer>左侧选择文档查看；联网时启用 Markdown 排版与代码高亮，断网自动回退纯文本。</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/highlight.min.js" defer></script>
+<script>
+/* ---- 配置：聚合哪些文档 ---- */
+const DOCS = [
+  { file: "cpp-to-go-cheatsheet.md", title: "C++ → Go 算法题快速转换指南" },
+  { file: "go-learning-framework.md", title: "Go 语言学习框架（C++ 背景版）" },
+  { file: "mcp-learning-guide.md",    title: "MCP（Model Context Protocol）学习指南" }
+];
+
+const tocList = document.getElementById('tocList');
+const tocStatus = document.getElementById('tocStatus');
+const main = document.getElementById('main');
+const outline = document.getElementById('outline');
+const outlineList = document.getElementById('outlineList');
+
+/* ---- 主题切换 ---- */
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  document.getElementById('md-light').disabled = (t === 'dark');
+  document.getElementById('md-dark').disabled  = (t !== 'dark');
+  document.getElementById('hl-light').disabled = (t === 'dark');
+  document.getElementById('hl-dark').disabled  = (t !== 'dark');
+  try { localStorage.setItem('dsh-docs-theme', t); } catch (e) {}
+}
+function initTheme() {
+  let t;
+  try { t = localStorage.getItem('dsh-docs-theme'); } catch (e) {}
+  if (!t) t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  applyTheme(t);
+}
+document.getElementById('themeBtn').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
+});
+
+/* ---- 大纲面板显隐 ---- */
+const outlineToggle = document.getElementById('outlineToggle');
+function setOutline(show) {
+  outline.classList.toggle('hidden', !show);
+  outlineToggle.classList.toggle('on', show);
+  try { localStorage.setItem('dsh-docs-outline', show ? '1' : '0'); } catch (e) {}
+}
+outlineToggle.addEventListener('click', () => setOutline(outline.classList.contains('hidden')));
+
+/* ---- 状态变量 ---- */
+const docLinks = [];      // {i, link}  每篇文档的左侧链接
+const docHeadings = [];   // docHeadings[i] = [{id,text,level,el}] 每篇文档的标题
+const docSource = [];     // docSource[i] = 已拉取的 markdown 原文（缓存，避免重复 fetch）
+const docPending = [];    // docPending[i] = 进行中的 fetch Promise（去重）
+let selectedDoc = 0;      // 当前选中的文档
+let activeHeading = 0;    // 当前高亮的标题序号
+let currentHost = null;   // 当前正文容器
+
+function slug(s, i) { return 'h-' + i + '-' + (s.replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fa5-]/g, '').slice(0, 40) || ('x' + i)); }
+
+function addDocEntry(doc, idx) {
+  const link = document.createElement('a');
+  link.classList.add('lvl0');
+  link.dataset.text = doc.title;
+  link.textContent = doc.title;
+  link.addEventListener('click', () => selectDoc(idx));
+  tocList.appendChild(link);
+  docLinks.push({ i: idx, link });
+}
+
+function renderRaw(text, container) { const pre = document.createElement('pre'); pre.textContent = text; container.appendChild(pre); }
+
+function addCopyButtons(container) {
+  container.querySelectorAll('pre').forEach(pre => {
+    if (pre.querySelector('.copy-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = '复制';
+    btn.addEventListener('click', () => {
+      const txt = pre.innerText;
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject())
+        .then(() => { btn.textContent = '已复制'; setTimeout(() => btn.textContent = '复制', 1200); })
+        .catch(() => { btn.textContent = '复制失败'; });
+    });
+    pre.appendChild(btn);
+  });
+}
+
+/* 把 markdown 渲染进 host，并登记标题供右侧大纲使用 */
+function renderDocInto(idx, md, host) {
+  host.innerHTML = '';
+  const body = document.createElement('div');
+  body.className = 'markdown-body';
+  host.appendChild(body);
+
+  if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+    body.innerHTML = marked.parse(md);
+    const hs = [];
+    body.querySelectorAll('h1,h2,h3').forEach((h, k) => {
+      const id = slug(h.textContent, idx + 'd' + k);
+      h.id = id;
+      hs.push({ id, text: h.textContent, level: h.tagName === 'H1' ? 0 : h.tagName === 'H2' ? 1 : 2, el: h });
+    });
+    docHeadings[idx] = hs;
+    if (typeof hljs !== 'undefined') {
+      body.querySelectorAll('pre code').forEach((el) => { try { hljs.highlightElement(el); } catch (e) {} });
+    }
+  } else {
+    renderRaw(md, body);
+    docHeadings[idx] = [];
+  }
+  addCopyButtons(body);
+}
+
+/* 确保当前文档内容就绪：优先用缓存，否则 fetch（去重） */
+async function ensureDocContent(idx) {
+  const host = currentHost;
+  if (!host || selectedDoc !== idx) return;
+
+  if (docSource[idx] === undefined) {
+    const st = document.createElement('div');
+    st.className = 'status';
+    st.textContent = '正在加载…';
+    host.appendChild(st);
+    if (!docPending[idx]) {
+      docPending[idx] = fetch(DOCS[idx].file)
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+        .then(md => { docSource[idx] = md; return md; });
+    }
+    try {
+      await docPending[idx];
+    } catch (e) {
+      if (selectedDoc !== idx || host !== currentHost) return;
+      host.innerHTML = '';
+      const p = document.createElement('p');
+      p.textContent = '加载 ' + DOCS[idx].file + ' 失败：' + e.message;
+      host.appendChild(p);
+      docHeadings[idx] = [];
+      renderOutline();
+      return;
+    }
+    if (selectedDoc !== idx || host !== currentHost) return; // 已切换，丢弃
+  }
+  renderDocInto(idx, docSource[idx], host);
+  renderOutline();
+  updateActive();
+}
+
+/* 选中某篇文档：左侧高亮 + 正文区重建 + 回到顶部 */
+function selectDoc(idx) {
+  selectedDoc = idx;
+  activeHeading = 0;
+  docLinks.forEach(d => d.link.classList.toggle('active', d.i === idx));
+  main.innerHTML = '';
+
+  const section = document.createElement('section');
+  section.className = 'doc';
+  const head = document.createElement('div');
+  head.className = 'doc-head';
+  const h2 = document.createElement('h2');
+  h2.textContent = DOCS[idx].title;
+  const fileSpan = document.createElement('span');
+  fileSpan.className = 'file';
+  fileSpan.textContent = DOCS[idx].file;
+  head.appendChild(h2); head.appendChild(fileSpan);
+  section.appendChild(head);
+
+  const host = document.createElement('div');
+  host.className = 'doc-body';
+  section.appendChild(host);
+  main.appendChild(section);
+  currentHost = host;
+
+  window.scrollTo({ top: 0 });
+  ensureDocContent(idx);
+}
+
+/* ---- 右侧大纲渲染（只显示选中文档的标题） ---- */
+function renderOutline() {
+  outlineList.innerHTML = '';
+  const hs = docHeadings[selectedDoc] || [];
+  if (!hs.length) {
+    outlineList.innerHTML = '<div class="hint">（暂无大纲）</div>';
+    return;
+  }
+  hs.forEach((h, k) => {
+    const a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.className = 'lvl' + h.level;
+    a.textContent = h.text;
+    a.classList.toggle('active', k === activeHeading);
+    a.addEventListener('click', () => { activeHeading = k; renderOutline(); });
+    outlineList.appendChild(a);
+  });
+}
+
+/* ---- 滚动定位（仅当前文档的标题） ---- */
+let ticking = false;
+function updateActive() {
+  ticking = false;
+  const off = 90;
+  const hs = docHeadings[selectedDoc] || [];
+  let curHead = 0;
+  hs.forEach((h, k) => { if (h.el && h.el.getBoundingClientRect().top <= off) curHead = k; });
+  activeHeading = curHead;
+  renderOutline();
+  document.getElementById('toTop').classList.toggle('show', window.scrollY > 400);
+}
+window.addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(updateActive); } }, { passive: true });
+document.getElementById('toTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+/* ---- 目录过滤（左侧文档名） ---- */
+document.getElementById('tocFilter').addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  tocList.querySelectorAll('a').forEach(a => {
+    a.style.display = (!q || (a.dataset.text || '').toLowerCase().includes(q)) ? '' : 'none';
+  });
+});
+
+/* ---- 启动 ---- */
+(async () => {
+  initTheme();
+  let o = '1';
+  try { o = localStorage.getItem('dsh-docs-outline'); } catch (e) {}
+  setOutline(o !== '0');
+  for (let i = 0; i < DOCS.length; i++) addDocEntry(DOCS[i], i);
+  tocStatus.textContent = '共 ' + DOCS.length + ' 篇文档';
+  selectDoc(0);
+})();
+</script>
+</body>
+</html>
