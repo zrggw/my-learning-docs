@@ -4,6 +4,7 @@
 
 ## 文档
 
+- [C 语言高级内容学习指南（C++ 背景版）](c-advanced-learning.md)
 - [C++ → Go 算法题快速转换指南](cpp-to-go-cheatsheet.md)
 - [Go 语言学习框架（C++ 背景版）](go-learning-framework.md)
 - [MCP（Model Context Protocol）学习指南](mcp-learning-guide.md)
