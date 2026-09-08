@@ -210,6 +210,63 @@ qsort(arr, n, sizeof(int), cmp);
 - [ ] **`<string.h>`**：C 的字符串是 `char[]` + 以 `\0` 结尾。
   - `strlen(s)`（长度）、`strcpy`/`strncpy`（拷贝）、`strcat`（连接）、`strcmp`（比较，返回 <0/=0/>0）
   - 比较相等：**`strcmp(s1, s2) == 0`**（不能直接 `==` 比较数组内容，那是在比地址）
+
+### 6.1 字符串比较（高频，考点密集）
+
+- [ ] **`strcmp(s1, s2)` 的返回值规则**：
+  - 返回 **<0**：`s1` 字典序在 `s2` 之前（`s1 < s2`）
+  - 返回 **=0**：两个字符串相等（**逐字符、长度都相等**）
+  - 返回 **>0**：`s1` 字典序在 `s2` 之后（`s1 > s2`）
+  - 比较的是**字符的 ASCII 码大小**，逐字符比到出现差异或遇到 `\0` 为止。数字字符 `'1'`(49) < 大写 `'A'`(65) < 小写 `'a'`(97)
+  ```c
+  if (strcmp(a, b) == 0) puts("相等");
+  else if (strcmp(a, b) < 0) puts("a 在 b 前");
+  ```
+- [ ] **判断相等千万别用 `==`（经典错误）**：
+  ```c
+  char a[] = "abc", b[] = "abc";
+  if (a == b)          // ❌ 两个数组名是不同地址，永远为假
+  if (strcmp(a, b) == 0) // ✅ 正确
+  ```
+- [ ] **`strncmp(s1, s2, n)`：只比较前 n 个字符**：
+  - 用于**前缀匹配**、比较"字符串与某个前缀"：`strncmp(s, "http://", 7) == 0` 判断是否是 `http://` 开头
+  - `n` 最大比较字符数；到 `n` 或遇到 `\0` 就停
+- [ ] **大小写不敏感比较**：C 标准库没有直接函数，需逐字符转换后比较：
+  ```c
+  int stricmp_ci(const char *a, const char *b) {
+      while (*a && *b) {
+          int ca = tolower((unsigned char)*a), cb = tolower((unsigned char)*b);
+          if (ca != cb) return ca - cb;
+          a++; b++;
+      }
+      return tolower((unsigned char)*a) - tolower((unsigned char)*b);
+  }
+  ```
+- [ ] **在 `qsort` 里排序字符串数组**（比较函数用 `strcmp`）：
+  ```c
+  int cmp_str(const void *a, const void *b) {
+      return strcmp(*(const char* const*)a, *(const char* const*)b);  // 升序，字典序
+  }
+  qsort(words, n, sizeof(char*), cmp_str);
+  ```
+  - 注意 `a`/`b` 是"指向 `char*` 的指针"，要先解引用拿到字符串指针，再交给 `strcmp`
+  - 改成 `return -strcmp(...);`（或调换两参数）即降序
+- [ ] **自定义规则比较（结构体多关键字）**：先按主关键字 `strcmp`，相等再比次关键字：
+  ```c
+  int cmp_person(const void *a, const void *b) {
+      const Person *pa = a, *pb = b;
+      int r = strcmp(pa->name, pb->name);   // 主：姓名升序
+      if (r) return r;
+      return pa->age - pb->age;             // 次：年龄升序
+  }
+  ```
+- [ ] **`strcmp` vs `strncmp` vs 手写规避**：
+  - `strcmp` 会一直比到 `\0`，若字符串很长效率稍低；前缀/安全校验用 `strncmp` 限长
+  - 比较"是否完全相同"且明确知道长度时，`memcmp(s1, s2, len) == 0` 更快（不依赖 `\0`）
+  - 只要各自 `\0` 终止且长度不失控，`strcmp` 最省心
+
+> 与 C++ 对照：`std::string` 支持 `<`/`>`/`==` 直接比较（重载了运算符还保留字典序）；C 必须用 `strcmp` 或 `strncmp`。**`strcmp` 返回值"符号"才有意义，别拿具体值当"差多少"。**
+
 - [ ] **`strtok`（按分隔符切分）**：
   ```c
   char s[] = "a,b,c";
