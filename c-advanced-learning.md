@@ -477,6 +477,88 @@
 
 ---
 
+## 阶段 13：安全函数（C11 Annex K，`_s` 系列）
+
+> 用途：C11 引入的**边界检查（bounds-checking）安全函数**，在拷贝/格式化时**显式传长度**，越界或不合规时触发约定处理器而非静默 UB。
+> **先看移植性（很重要）**：Annex K 是**可选**的。MSVC（Windows）实现了亿大部分；**Linux 上 glibc 的 GCC/Clang 环境通常不实现**，需要 `__STDC_LIB_EXT1__` 宏确认。**用前先判宏，否则代码无移植性**。
+
+- [ ] **启用前提（重点）**：`_s` 函数**并非默认可见**，必须在任何头文件之前定义宏：
+  ```c
+  #define __STDC_WANT_LIB_EXT1__ 1   // 必须先定义，让 string.h/stdio.h 暴露 _s 版本
+  #include <string.h>
+  #include <stdio.h>
+  ```
+  - 支持与否由 `__STDC_LIB_EXT1__` 宏判断（标准库实现了才定义）。
+  - **Linux/glibc 大多不定义**，`memset_s`/`memcpy_s`/`strcpy_s` 等可能编译失败或链接不到——**写平台无关代码时先探测**：
+    ```c
+    #if defined(__STDC_LIB_EXT1__)
+        // 有 _s，用安全版
+    #else
+        // 没有，退回到手写的边界检查
+    #endif
+    ```
+
+### 13.1 常用安全函数与用法
+
+- [ ] **`memset_s(ptr, destsz, value, count)`**：安全的 `memset` 等价物。
+  - 参数：`destsz` = 目标缓冲**总大小**；`count` = 要写入的字节数
+  - **返回值**：成功 **0**；**任何运行时约束失败返回非 0**（错误码），并调用约束处理器
+  - 与 `memset` 区别：`memset_s` 会**检查 `count > destsz`**，越界时失败且**不会越界写**
+  ```c
+  #define __STDC_WANT_LIB_EXT1__ 1
+  #include <string.h>
+  char buf[8];
+  int rc = memset_s(buf, sizeof(buf), 0, sizeof(buf));  // 清空整块
+  if (rc) return -1;                                    // 返回非 0 = 失败
+  ```
+- [ ] **`memcpy_s(dst, destsz, src, count)`**：安全的 `memcpy`。
+  - 检查 `count > destsz`（目标写不下）等约束；成功返回 **0**，失败返回非 0。
+  - 目标缓冲区**不足**时**不写入**（不回环覆盖），并调用约束处理器。**相比 `memcpy`，它防了目标越界。**
+  ```c
+  int rc = memcpy_s(dst, sizeof(dst), src, sizeof(src));
+  if (rc != 0) { /* 处理失败：目标太小等 */ }
+  ```
+- [ ] **`strcpy_s(dst, destsz, src)` / `strcat_s` / `strncat_s`**：安全的字符串拷贝/连接。
+  - 会在 `destsz` 范围内拷贝并**保证 `\0` 结尾**，目标太小则失败（非 0）。
+  - 参数顺序**与 `strncpy` 相反**：`strcpy_s(目标, 目标大小, 源)`。
+  ```c
+  char dst[16];
+  int rc = strcpy_s(dst, sizeof(dst), src);   // 自动保证 \0，越界返回非 0
+  ```
+- [ ] **`sprintf_s(dst, destsz, fmt, ...)` / `snprintf_s` / `vsprintf_s`**：安全格式化。
+  - `sprintf_s` 会在 `destsz` 内写入并强制 `\0`；**目标写不下 → 失败（负值）**。
+  - 若格式串占位符与参数**数量/类型不符**，也被视为运行时约束错误（这比 `sprintf` 更严格）。
+- [ ] **`fopen_s(&fp, path, mode)`**：安全打开文件。
+  - 句柄**先输出**到 `&fp`；成功返回 **0**，失败返回非 0（`errno` 风格，**不是**返回 `NULL`）。
+  ```c
+  FILE *fp = NULL;
+  if (fopen_s(&fp, "data.txt", "r") != 0) { /* 打开失败 */ }
+  ```
+- [ ] **`scanf_s` / `sscanf_s` / `fscanf_s`**：安全格式化输入。
+  - `%s`/`%c`/`%[` 后**必须多给一个长度参数**，防止读溢出：
+    ```c
+    char buf[10];
+    scanf_s("%9s", buf, (unsigned)sizeof(buf));   // 长度参数指定读取上限
+    ```
+  - 缺长度参数 = 运行时约束错误。**注意：长度参数是在对应转换符后、紧跟着作为附加实参传入的。**
+
+### 13.2 返回值与约束失败
+
+- [ ] 所有 `_s` 函数**成功返回 0，失败返回非 0**（个别如 `sprintf_s` 返回负值表示未写入）。
+- [ ] **运行时约束失败**（runtime-constraint violation）统一处理：
+  - 目标太大/太小、`destsz == 0`、参数为空指针等
+  - 默认调用全局约束处理器 `constraint_handler_t`（`set_constraint_handler_s` 可自定义）
+  - **同一函数失败时参数指针/内容可能被清零**（部分实现），但**不保证**——所以别依赖失败后的内容
+- [ ] **默认约束处理器行为**：标准要求默认处理器**写出错误信息并终止程序**（`abort`）。实际 MSVC 等会有差异，**千万不要以为失败只是"返回 -1 继续跑"**。
+- [ ] **使用要点**：
+  - 这些函数**接受 `destsz` 而非自动推导**，所以 `sizeof(dst)` 是常用写法，但**数组在形参里退化成指针时别用 `sizeof`**
+  - 传入 `destsz` 的**语义是"缓冲区能容纳的总字节数"**，不是要读写的字节数——`memset_s(ptr, destsz, v, count)` 里 `count <= destsz` 才合法
+  - 失败后**别忘了看返回值**，否则等于没加安全
+
+> 与 C++ 对照：C 的 `_s` 函数靠"显式传长度 + 运行时检查"防越界；C++ 用 `std::vector`/`std::array`/`std::string` + 迭代器及 RAII 天然规避越界（更干净）。但 **C++ 里也有 `<cstring>` 等，若用裸指针仍要小心**。另外，C 的 `_s` 是"补救"，**真正可靠的是从一开始就用正确的长度和 `snprintf` 这类本来就安全的接口**。
+
+---
+
 ## 学习进度总表
 
 | 阶段 | 内容 | 预计投入 | 状态 |
@@ -493,6 +575,7 @@
 | 10 | 未定义行为与安全 | 1 天 | ☐ |
 | 11 | 工具链与调试 | 持续 | ☐ |
 | 12 | 文件操作（标准库 I/O） | 1-2 天 | ☐ |
+| 13 | 安全函数（Annex K，`_s` 系列） | 1 天 | ☐ |
 
 ---
 
