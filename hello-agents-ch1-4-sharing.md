@@ -573,30 +573,30 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 
 | 对应板 | 原文图 | 文件 |
 |---|---|---|
+| 板 1 | 图 1.2 简单反射智能体（恒温器） | `ch1-simple-reflex-thermostat.png` |
+| 板 1 | 图 1.3 智能体决策时间与质量关系图 | `ch1-decision-quality-vs-time.png` |
+| 板 1 | 图 1.4 亚符号 / 符号 / 神经符号三种知识表示 | `ch1-knowledge-paradigms.png` |
+| 板 1 | 表 1.1 传统智能体与 LLM 驱动智能体对比 | `ch1-traditional-vs-llm.jpg` |
+| 板 1（备选） | 表 1.2 智能旅行助手的 PEAS 描述 | `ch1-peas-table.png` |
 | 板 2 | 图 1.5 智能体与环境交互的基本循环 | `ch1-agent-loop.png` |
 | 板 2 / 板 11 | 图 2.10 LLM 驱动的智能体核心组件架构 | `ch2-llm-agent-architecture.png` |
-| 板 1 | 图 1.3 智能体决策时间与质量关系图 | `ch1-decision-quality-vs-time.png` |
-| 板 1 | 表 1.1 传统智能体与 LLM 驱动智能体对比 | `ch1-traditional-vs-llm.jpg` |
-| 板 1 | 图 1.2 简单反射智能体（恒温器） | `ch1-simple-reflex-thermostat.png` |
-| 板 1 | 图 1.4 亚符号 / 符号 / 神经符号三种知识表示 | `ch1-knowledge-paradigms.png` |
-| 板 1（备选） | 表 1.2 智能旅行助手的 PEAS 描述 | `ch1-peas-table.png` |
 | 板 3 | 图 1.6 Workflow 和 Agent 的差异 | `ch1-workflow-vs-agent.png` |
 | 板 4 | 图 2.1 AI 智能体的演进阶梯 | `ch2-evolution-stairs.png` |
 | 板 4 | 图 2.4 MYCIN 反向链推理流程 | `ch2-mycin-backward-chaining.png` |
 | 板 4 | 图 2.6 "心智社会"搭积木塔的涌现机制 | `ch2-society-of-mind.png` |
+| 板 4 | 图 2.8 强化学习的核心交互循环 | `ch2-rl-loop.png` |
 | 板 4 | 图 2.9 "预训练-微调"范式 | `ch2-pretrain-finetune.png` |
+| 板 4 | 图 2.11 智能体发展演进时间线 | `ch2-timeline-table.png` |
 | 板 4（备选） | 图 2.2 物理符号系统的构成元素 | `ch2-physical-symbol-system.png` |
 | 板 4（备选） | 图 2.3 专家系统的通用架构 | `ch2-expert-system-architecture.png` |
 | 板 4（备选） | 图 2.5 SHRDLU 的"积木世界"交互界面 | `ch2-shrdlu-blocks-world.png` |
 | 板 4（备选） | 图 2.7 符号主义 vs 联结主义范式对比 | `ch2-symbolism-vs-connectionism.png` |
-| 板 4 | 图 2.8 强化学习的核心交互循环 | `ch2-rl-loop.png` |
-| 板 4 | 图 2.11 智能体发展演进时间线 | `ch2-timeline-table.png` |
 | 板 5 | 图 3.1 马尔可夫假设示意图 | `ch3-markov-assumption.png` |
 | 板 5 | 图 3.2 神经网络语言模型架构示意图 | `ch3-nnlm-architecture.png` |
 | 板 5 | 图 3.3 RNN 结构示意图 | `ch3-rnn-structure.png` |
 | 板 5 | 图 3.4 Transformer 整体架构图 | `ch3-transformer-architecture.png` |
-| 板 6 | 表 3.1 BPE 算法合并过程示例 | `ch3-bpe-merge-table.png` |
 | 板 5 | 图 3.5 多头注意力机制 | `ch3-multi-head-attention.png` |
+| 板 6 | 表 3.1 BPE 算法合并过程示例 | `ch3-bpe-merge-table.png` |
 | 板 7 | 图 4.1 ReAct 协同循环 | `ch4-react-loop.png` |
 | 板 8 | 图 4.2 Plan-and-Solve 两阶段工作流 | `ch4-plan-and-solve.png` |
 | 板 9 | 图 4.3 Reflection 迭代循环 | `ch4-reflection.png` |
