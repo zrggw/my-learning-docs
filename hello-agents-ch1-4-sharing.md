@@ -19,7 +19,23 @@
 
 **必须提前写好的 3 个骨架**（省时间）：① 左栏 Agent Loop 大圆；② 中栏底部一条空白时间轴；③ 板 10 的对比表表头（6 行 × 4 列，画格子最费时间）。
 
-**原文配图**：12 张精选配图已随文档打包在 `images/hello-agents/`（清单见 5.5 节），现场可以直接投屏代替手绘；板书图与原文不一致时以板书为准。
+**原文配图**：16 张精选配图已随文档打包在 `images/hello-agents/`（清单见 5.5 节），现场可以直接投屏代替手绘；板书图与原文不一致时以板书为准。
+
+**📐 板书 vs 原文配图：哪些板可以直接投图**（第一章逐板结论）
+
+| 板 | 板书画的 | 原文对应图 | 结论 |
+|---|---|---|---|
+| 板 1 | 定义四要素（环境 / 传感器 / 执行器 / 自主性）+ 传统五级台阶 | 图 1.2 简单反射（恒温器）、图 1.3 决策时间-质量曲线、表 1.1 传统 vs LLM 六维对比 | **部分可替代**：图 1.3 和表 1.1 可直接投屏（已插入）；"自主性"三个字图上没有，要手写补；**五级台阶原文没有对应图，必须手画** |
+| 板 2 | Agent Loop 闭环 + Thought / Action / Observation | 图 1.5（同一个闭环，连 Planning / Tool Selection / State Change 都有） | **技术上 100% 可替代**，但**不建议**：左栏这张图要常驻全场、被反复用手指，投屏翻页就消失了 |
+| 板 3 | Workflow vs Agent 两栏对比 | 图 1.6 | **可替代**：先手画 30 秒简版两框，再投图 1.6 补细节（图里还画了 LLM ↔ Tool / Memory 的辐条） |
+
+**三条使用原则**
+
+1. **该用图的**：结构复杂、手绘费时且容易画歪的——决策质量曲线（图 1.3）、六维对比表（表 1.1）、演进阶梯（图 2.1）、Transformer 架构（图 3.4）、多头注意力（图 3.5）。
+2. **不该用图的**：要常驻白板反复引用的（板 2）、要现场"从零搭起来"建立叙事感的（板 7 的 ReAct 三框循环）、要边讲边往上加箭头的（板 10 选型表）。
+3. **代价**：投屏图翻页即消失、没法随手补箭头、投影与手写来回切换会打断节奏；图里的细节（英文标注、与本场无关的模块）还会抢注意力。
+
+> 一句话：**图当"证据 / 对照 / 省时间"，板书当"骨架 / 叙事"。**
 
 **开场前默念三句话**：不念概念、念因果；每个术语都给一个类比；每章结束往右栏落一条可带走的结论。
 
@@ -86,6 +102,11 @@ Q：给 ChatGPT 说"帮我规划一次厦门之旅，预算 5000"
 简单反射(恒温器) → 基于模型(世界模型) → 基于目标(GPS+A*) → 基于效用(时间/油耗/避堵) → 学习型(RL / AlphaGo Zero)
                                                                               ↑ 学习是"元能力"
 ```
+
+**🖼 原文配图**
+
+![图 1.3 智能体决策时间与质量关系图（反应式 / 混合式 / 规划式）](images/hello-agents/ch1-decision-quality-vs-time.png)
+![表 1.1 传统智能体与 LLM 驱动智能体的核心对比（核心引擎 / 知识来源 / 处理指令 / 工作模式 / 泛化能力 / 开发范式）](images/hello-agents/ch1-traditional-vs-llm.jpg)
 
 **🎤 口播要点**
 
@@ -392,7 +413,7 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 
 **🖼 原文配图**
 
-![图 4.4（表 4.1）不同 Agent Loop 的选择策略](images/hello-agents/ch4-paradigm-selection.jpg)
+![图 4.4（表 4.1）不同 Agent Loop 的选择策略](images/hello-agents/ch4-paradigm-selection.png)
 
 **🎤 口播要点**
 
@@ -517,15 +538,22 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 
 ---
 
-### 5.5 原文配图库（12 张，可直接投屏 / 打印）
+### 5.5 原文配图库（16 张，可直接投屏 / 打印）
 
 > 全部取自原文 `docs/images/`，已按章节整理到 `images/hello-agents/`。
 > 来源：[datawhalechina/hello-agents](https://github.com/datawhalechina/hello-agents) · 授权 **CC BY-NC-SA 4.0**（署名—非商业性使用—相同方式共享），此处仅用于学习分享。
+>
+> **收录说明**：图 1.1（环境—感知—行动示意图）与图 1.5 功能重叠、且单文件 1.15 MB，未重复收录；图 1.2、图 1.4 体积小，作为第 1 章口头举例时的备选图。
+> **格式说明**：原文 `1-figures/1757242319667-2.png`（表 1.1）字节实际是 **JPEG**（扩展名与内容不符），本稿按真实格式存为 `ch1-traditional-vs-llm.jpg`，避免部分渲染器拒读。
 
 | 对应板 | 原文图 | 文件 |
 |---|---|---|
 | 板 2 | 图 1.5 智能体与环境交互的基本循环 | `ch1-agent-loop.png` |
 | 板 2 / 板 11 | 图 2.10 LLM 驱动的智能体核心组件架构 | `ch2-llm-agent-architecture.png` |
+| 板 1 | 图 1.3 智能体决策时间与质量关系图 | `ch1-decision-quality-vs-time.png` |
+| 板 1 | 表 1.1 传统智能体与 LLM 驱动智能体对比 | `ch1-traditional-vs-llm.jpg` |
+| 板 1（备选） | 图 1.2 简单反射智能体（恒温器） | `ch1-simple-reflex-thermostat.png` |
+| 板 1（备选） | 图 1.4 亚符号 / 符号 / 神经符号三种知识表示 | `ch1-knowledge-paradigms.png` |
 | 板 3 | 图 1.6 Workflow 和 Agent 的差异 | `ch1-workflow-vs-agent.png` |
 | 板 4 | 图 2.1 AI 智能体的演进阶梯 | `ch2-evolution-stairs.png` |
 | 板 4 | 图 2.8 强化学习的核心交互循环 | `ch2-rl-loop.png` |
@@ -535,7 +563,7 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 | 板 7 | 图 4.1 ReAct 协同循环 | `ch4-react-loop.png` |
 | 板 8 | 图 4.2 Plan-and-Solve 两阶段工作流 | `ch4-plan-and-solve.png` |
 | 板 9 | 图 4.3 Reflection 迭代循环 | `ch4-reflection.png` |
-| 板 10 | 图 4.4（表 4.1）Agent Loop 选择策略 | `ch4-paradigm-selection.jpg` |
+| 板 10 | 图 4.4（表 4.1）Agent Loop 选择策略 | `ch4-paradigm-selection.png` |
 
 **图 2.1 AI 智能体的演进阶梯**（板 4 主线）
 
@@ -548,6 +576,22 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 **图 1.6 Workflow 和 Agent 的差异**（板 3）
 
 ![图 1.6 Workflow 和 Agent 的差异](images/hello-agents/ch1-workflow-vs-agent.png)
+
+**图 1.3 智能体决策时间与质量关系图**（板 1，反应式 / 混合式 / 规划式及其例子）
+
+![图 1.3 智能体决策时间与质量关系图](images/hello-agents/ch1-decision-quality-vs-time.png)
+
+**表 1.1 传统智能体与 LLM 驱动智能体的核心对比**（板 1）
+
+![表 1.1 传统智能体与 LLM 驱动智能体的核心对比](images/hello-agents/ch1-traditional-vs-llm.jpg)
+
+**图 1.2 简单反射智能体（恒温器）**（板 1 备选）
+
+![图 1.2 简单反射智能体的决策逻辑示意图](images/hello-agents/ch1-simple-reflex-thermostat.png)
+
+**图 1.4 三种知识表示范式**（板 1 备选，讲神经符号主义时用）
+
+![图 1.4 亚符号主义、符号主义与神经符号混合主义](images/hello-agents/ch1-knowledge-paradigms.png)
 
 **图 2.10 LLM 驱动的智能体核心组件架构**（板 2 / 收尾）
 
@@ -583,4 +627,4 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 
 **图 4.4（表 4.1）不同 Agent Loop 的选择策略**（板 10）
 
-![图 4.4 不同 Agent Loop 的选择策略](images/hello-agents/ch4-paradigm-selection.jpg)
+![图 4.4 不同 Agent Loop 的选择策略](images/hello-agents/ch4-paradigm-selection.png)
