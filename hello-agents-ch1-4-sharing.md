@@ -3,7 +3,7 @@
 > **主题**：从"会聊天"到"会干活"——智能体的第一性原理与三大经典范式
 > **范围**：第 1 章 初识智能体 / 第 2 章 智能体发展史 / 第 3 章 大语言模型基础 / 第 4 章 智能体经典范式构建
 > **形式**：白板手写（无 PPT）。全文 12 块板书，**净演讲 25:00**，Q&A 另计。
-> **素材来源**：`D:\code\hello-agents`（datawhalechina/hello-agents）`docs/chapter1~chapter4` 原文，已逐条核对。
+> **素材来源**：`D:\code\hello-agents`（datawhalechina/hello-agents）`docs/chapter1~chapter4` 原文，已逐条核对；配图取自原文 `docs/images/`，见第 5.5 节。
 
 ---
 
@@ -18,6 +18,8 @@
 **颜色约定**：黑＝结构骨架，蓝＝定义与关键词，红＝限制与坑，绿＝工程落地结论（绿字最后会被收尾直接复用）。
 
 **必须提前写好的 3 个骨架**（省时间）：① 左栏 Agent Loop 大圆；② 中栏底部一条空白时间轴；③ 板 10 的对比表表头（6 行 × 4 列，画格子最费时间）。
+
+**原文配图**：12 张精选配图已随文档打包在 `images/hello-agents/`（清单见 5.5 节），现场可以直接投屏代替手绘；板书图与原文不一致时以板书为准。
 
 **开场前默念三句话**：不念概念、念因果；每个术语都给一个类比；每章结束往右栏落一条可带走的结论。
 
@@ -118,6 +120,11 @@ Q：给 ChatGPT 说"帮我规划一次厦门之旅，预算 5000"
    ★ 行动不是终点：观察才是下一轮的起点（闭环，不是直线）
 ```
 
+**🖼 原文配图（可投屏 / 打印）**
+
+![图 1.5 智能体与环境交互的基本循环](images/hello-agents/ch1-agent-loop.png)
+![图 2.10 LLM 驱动的智能体核心组件架构](images/hello-agents/ch2-llm-agent-architecture.png)
+
 **🎤 口播要点**
 
 1. 这个循环叫 **Agent Loop**，是全书的地基：感知 → 思考（规划 + 工具选择）→ 行动 → 环境状态变化 → 新观察 → 回到起点。
@@ -148,6 +155,10 @@ Agent（目标导向、动态推理）
 一句话：Workflow 让 AI 按部就班执行指令；Agent 给 AI 自由度去自主达成目标
 ```
 
+**🖼 原文配图**
+
+![图 1.6 Workflow 和 Agent 的差异](images/hello-agents/ch1-workflow-vs-agent.png)
+
 **🎤 口播要点**
 
 1. 这是全书最实用的一张对照表，也是团队最容易踩的坑：**很多号称 Agent 的系统其实是 Workflow**。
@@ -173,6 +184,12 @@ ELIZA  →   SHRDLU   →   MYCIN/专家系统 → 心智社会  →  联结主�
 痛点链（每次更替都是被上一代的痛逼出来的）：
 无语义/无状态 ─→ 知识获取瓶颈·常识·框架问题 ─→ 只会感知不会序贯决策 ─→ 缺先验知识、要海量交互 ─→ 幻觉
 ```
+
+**🖼 原文配图**
+
+![图 2.1 AI 智能体的演进阶梯（每级都标了"解决痛点 / 方案 / 新局限"）](images/hello-agents/ch2-evolution-stairs.png)
+![图 2.8 强化学习的核心交互循环](images/hello-agents/ch2-rl-loop.png)
+![图 2.11 智能体发展演进时间线（原文以表格形式给出）](images/hello-agents/ch2-timeline-table.png)
 
 **🎤 口播要点**
 
@@ -205,6 +222,11 @@ Attention = softmax(Q·Kᵀ / √d_k) · V
   比喻：注意力 = 开卷考试；Decoder-Only = 文字接龙
   没有位置编码，"agent learns" 和 "learns agent" 完全等价
 ```
+
+**🖼 原文配图**
+
+![图 3.4 Transformer 整体架构图](images/hello-agents/ch3-transformer-architecture.png)
+![图 3.5 多头注意力机制（Q/K/V → Scaled Dot-Product Attention → Concat → Linear）](images/hello-agents/ch3-multi-head-attention.png)
 
 **🎤 口播要点**
 
@@ -265,6 +287,10 @@ Attention = softmax(Q·Kᵀ / √d_k) · V
         history += [f"Action: {action}", f"Observation: {obs}"]   # ★ 闭环关键
 ```
 
+**🖼 原文配图**
+
+![图 4.1 ReAct 范式中的"思考-行动-观察"协同循环](images/hello-agents/ch4-react-loop.png)
+
 **🎤 口播要点**
 
 1. 先讲它解决了什么：在 ReAct（Yao, 2022）之前，"纯思考"（CoT）容易事实幻觉、无法交互，"纯行动"没有规划和纠错能力。ReAct 的洞察是——**思考与行动相辅相成：推理让行动有目的，行动为推理提供事实依据。**
@@ -296,6 +322,12 @@ Attention = softmax(Q·Kᵀ / √d_k) · V
    代价：2+n 次调用；计划静态，中途失败无法重规划，规划错则全程错
 ```
 
+**🖼 原文配图**
+
+![图 4.2 Plan-and-Solve 范式的两阶段工作流](images/hello-agents/ch4-plan-and-solve.png)
+
+> 注意：原文这张图是**含 Replan 的一般化流程**，而书中第 4.3 节的代码实现是**静态计划**（规划一次、不再重规划）——讲的时候可以借这张图说明"还可以更好"。
+
 **🎤 口播要点**
 
 1. 用原文的比喻开场：**ReAct 是循着蛛丝马迹随时改方向的侦探，Plan-and-Solve 是动工前先画完蓝图、再按蓝图施工的建筑师。**
@@ -321,6 +353,12 @@ Attention = softmax(Q·Kᵀ / √d_k) · V
    实例（找 1~n 素数）：试除法 O(n√n) ──反思──▶ 埃氏筛 O(n log log n) ──第2轮──▶ "无需改进"
    ★ 每绕一圈 ≈ 2 次 LLM 调用（反思+优化），全串行 → "以成本换质量"
 ```
+
+**🖼 原文配图**
+
+![图 4.3 Reflection 机制中的"执行-反思-优化"迭代循环](images/hello-agents/ch4-reflection.png)
+
+> 注意：原文这张图来自 Reflexion 论文的通用架构（含 Evaluator / 短期记忆 Trajectory / 长期记忆 Experience），比书中代码实现（Memory 存 execution + reflection 两类记录）更完整。
 
 **🎤 口播要点**
 
@@ -352,6 +390,10 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 代表场景         查"最新手机/天气"    多步数学应用题          代码/报告的质量优化
 ```
 
+**🖼 原文配图**
+
+![图 4.4（表 4.1）不同 Agent Loop 的选择策略](images/hello-agents/ch4-paradigm-selection.jpg)
+
 **🎤 口播要点**
 
 1. 强调这张表是**选型决策表**，不是知识表：先问"这个任务要的是**探索**、**稳定**还是**质量**"。
@@ -381,6 +423,8 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 
 延伸路线（本书后 12 章）：内存与上下文 8-9 → 通信协议 MCP/A2A 10 → RL 11 → 评估 12 → 实战 13-16
 ```
+
+**🖼 收尾可回到图 2.10**（板 2 配图）：`Agent = LLM + Loop + Tools + Memory` 就是那张原文架构图的四个模块。
 
 **🎤 口播要点**
 
@@ -470,3 +514,73 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 - 板 7–10 的提示词要点、代码骨架、实例（华为最新手机两步收敛、水果题 15→30→25→70、素数题试除法→埃氏筛、`max_steps` 默认 5、`max_iterations` 默认 3）：`docs/chapter4/第四章 智能体经典范式构建.md`。
 
 > 说明：板 4 时间轴按**年份**排序（ELIZA 1966 在 SHRDLU 1968–70 之前），而原书是先讲符号主义（含 SHRDLU）再讲 ELIZA，讲的时候按时间轴走更顺。
+
+---
+
+### 5.5 原文配图库（12 张，可直接投屏 / 打印）
+
+> 全部取自原文 `docs/images/`，已按章节整理到 `images/hello-agents/`。
+> 来源：[datawhalechina/hello-agents](https://github.com/datawhalechina/hello-agents) · 授权 **CC BY-NC-SA 4.0**（署名—非商业性使用—相同方式共享），此处仅用于学习分享。
+
+| 对应板 | 原文图 | 文件 |
+|---|---|---|
+| 板 2 | 图 1.5 智能体与环境交互的基本循环 | `ch1-agent-loop.png` |
+| 板 2 / 板 11 | 图 2.10 LLM 驱动的智能体核心组件架构 | `ch2-llm-agent-architecture.png` |
+| 板 3 | 图 1.6 Workflow 和 Agent 的差异 | `ch1-workflow-vs-agent.png` |
+| 板 4 | 图 2.1 AI 智能体的演进阶梯 | `ch2-evolution-stairs.png` |
+| 板 4 | 图 2.8 强化学习的核心交互循环 | `ch2-rl-loop.png` |
+| 板 4 | 图 2.11 智能体发展演进时间线 | `ch2-timeline-table.png` |
+| 板 5 | 图 3.4 Transformer 整体架构图 | `ch3-transformer-architecture.png` |
+| 板 5 | 图 3.5 多头注意力机制 | `ch3-multi-head-attention.png` |
+| 板 7 | 图 4.1 ReAct 协同循环 | `ch4-react-loop.png` |
+| 板 8 | 图 4.2 Plan-and-Solve 两阶段工作流 | `ch4-plan-and-solve.png` |
+| 板 9 | 图 4.3 Reflection 迭代循环 | `ch4-reflection.png` |
+| 板 10 | 图 4.4（表 4.1）Agent Loop 选择策略 | `ch4-paradigm-selection.jpg` |
+
+**图 2.1 AI 智能体的演进阶梯**（板 4 主线）
+
+![图 2.1 AI 智能体的演进阶梯](images/hello-agents/ch2-evolution-stairs.png)
+
+**图 1.5 智能体与环境交互的基本循环**（板 2 锚点）
+
+![图 1.5 智能体与环境交互的基本循环](images/hello-agents/ch1-agent-loop.png)
+
+**图 1.6 Workflow 和 Agent 的差异**（板 3）
+
+![图 1.6 Workflow 和 Agent 的差异](images/hello-agents/ch1-workflow-vs-agent.png)
+
+**图 2.10 LLM 驱动的智能体核心组件架构**（板 2 / 收尾）
+
+![图 2.10 LLM 驱动的智能体核心组件架构](images/hello-agents/ch2-llm-agent-architecture.png)
+
+**图 2.8 强化学习的核心交互循环**（板 4）
+
+![图 2.8 强化学习的核心交互循环](images/hello-agents/ch2-rl-loop.png)
+
+**图 2.11 智能体发展演进时间线**（板 4，表格形式，建议投屏放大看）
+
+![图 2.11 智能体发展演进时间线](images/hello-agents/ch2-timeline-table.png)
+
+**图 3.4 Transformer 整体架构图**（板 5）
+
+![图 3.4 Transformer 整体架构图](images/hello-agents/ch3-transformer-architecture.png)
+
+**图 3.5 多头注意力机制**（板 5）
+
+![图 3.5 多头注意力机制](images/hello-agents/ch3-multi-head-attention.png)
+
+**图 4.1 ReAct 协同循环**（板 7）
+
+![图 4.1 ReAct 协同循环](images/hello-agents/ch4-react-loop.png)
+
+**图 4.2 Plan-and-Solve 两阶段工作流**（板 8，含 Replan 的一般化版本）
+
+![图 4.2 Plan-and-Solve 两阶段工作流](images/hello-agents/ch4-plan-and-solve.png)
+
+**图 4.3 Reflection 迭代循环**（板 9，Reflexion 通用架构）
+
+![图 4.3 Reflection 迭代循环](images/hello-agents/ch4-reflection.png)
+
+**图 4.4（表 4.1）不同 Agent Loop 的选择策略**（板 10）
+
+![图 4.4 不同 Agent Loop 的选择策略](images/hello-agents/ch4-paradigm-selection.jpg)
