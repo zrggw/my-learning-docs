@@ -19,23 +19,32 @@
 
 **必须提前写好的 3 个骨架**（省时间）：① 左栏 Agent Loop 大圆；② 中栏底部一条空白时间轴；③ 板 10 的对比表表头（6 行 × 4 列，画格子最费时间）。
 
-**原文配图**：16 张精选配图已随文档打包在 `images/hello-agents/`（清单见 5.5 节），现场可以直接投屏代替手绘；板书图与原文不一致时以板书为准。
+**原文配图**：**28 张**原文配图已随文档打包在 `images/hello-agents/`（清单见 5.5 节）。**凡原文有图的板，优先投原文图**；板书图降级为两用——现场手画（建立"从零搭起来"的叙事感），或投屏/断网时兜底。板书与原文图不一致处，按各板下方的"注意"说明处理。
 
-**📐 板书 vs 原文配图：哪些板可以直接投图**（第一章逐板结论）
+**📐 板书 vs 原文配图：哪些板可以直接投图**（全场 12 板逐板结论）
 
-| 板 | 板书画的 | 原文对应图 | 结论 |
+| 板 | 板书画的 | 原文对应图 | 替代策略 |
 |---|---|---|---|
-| 板 1 | 定义四要素（环境 / 传感器 / 执行器 / 自主性）+ 传统五级台阶 | 图 1.2 简单反射（恒温器）、图 1.3 决策时间-质量曲线、表 1.1 传统 vs LLM 六维对比 | **部分可替代**：图 1.3 和表 1.1 可直接投屏（已插入）；"自主性"三个字图上没有，要手写补；**五级台阶原文没有对应图，必须手画** |
-| 板 2 | Agent Loop 闭环 + Thought / Action / Observation | 图 1.5（同一个闭环，连 Planning / Tool Selection / State Change 都有） | **技术上 100% 可替代**，但**不建议**：左栏这张图要常驻全场、被反复用手指，投屏翻页就消失了 |
-| 板 3 | Workflow vs Agent 两栏对比 | 图 1.6 | **可替代**：先手画 30 秒简版两框，再投图 1.6 补细节（图里还画了 LLM ↔ Tool / Memory 的辐条） |
+| 0 开场 | 聊天机器人 vs 智能体 | — | 无图，纯口播 |
+| 1 定义 / 台阶 | 四要素 + 传统五级台阶 | 图 1.2 恒温器、图 1.3 决策曲线、图 1.4 三种知识表示、表 1.1 传统 vs LLM、表 1.2 PEAS（备选） | **图能覆盖大部分**（已插入）；但①"自主性"三个字图上没有 ②**五级台阶原文没有配图，必须手画** |
+| 2 Agent Loop | 闭环 + Thought / Action / Observation | 图 1.5（同款闭环，且多了 Planning / Tool Selection / State Change）、图 2.10 组件架构 | 图能替代，但**建议仍手画**：要常驻左栏被反复指 |
+| 3 Workflow vs Agent | 两栏对比 | 图 1.6 | **图直接替代**（已插入） |
+| 4 发展史 | 时间轴 + 痛点链 | 图 2.1、2.4、2.6、2.9 为主，图 2.2 / 2.3 / 2.5 / 2.7 备选，另有图 2.8、2.11 | **图覆盖最全的一板**：时间线（2.11）+ 演进阶梯（2.1）可替代板书，四段口播各有对应图 |
+| 5 LLM 演进 | N-gram → … → Decoder-Only + 注意力 | 图 3.1、3.2、3.3、3.4、3.5 | **几乎全可替代**：缺陷链的每一环都有图 |
+| 6 六条结论 | 6 条文字清单 | 表 3.1 BPE 合并过程 | 清单只能手写；"分词是隐藏 bug"那条投表 3.1 |
+| 7 ReAct | 循环图 + 代码 | 图 4.1 | 图能替代循环图，但**建议手画**（本场叙事高潮，"从零搭起来"） |
+| 8 Plan-and-Solve | 两阶段 + 代码 | 图 4.2 | 图可替代（注意图含 Replan，书中代码是静态计划） |
+| 9 Reflection | 三框环 + Memory | 图 4.3 | 图可替代（注意图是 Reflexion 通用架构） |
+| 10 选型表 | 6 行对比表 | 图 4.4（表 4.1） | 图直接替代；要边讲边加箭头时仍建议手写 |
+| 11 收尾 | 公式 + 落地清单 | 图 2.10 | 指回板 2 配图即可 |
 
-**三条使用原则**
+**结论：但凡原文有图，就以原文图为主。** 只有三类例外值得动手画——
 
-1. **该用图的**：结构复杂、手绘费时且容易画歪的——决策质量曲线（图 1.3）、六维对比表（表 1.1）、演进阶梯（图 2.1）、Transformer 架构（图 3.4）、多头注意力（图 3.5）。
-2. **不该用图的**：要常驻白板反复引用的（板 2）、要现场"从零搭起来"建立叙事感的（板 7 的 ReAct 三框循环）、要边讲边往上加箭头的（板 10 选型表）。
-3. **代价**：投屏图翻页即消失、没法随手补箭头、投影与手写来回切换会打断节奏；图里的细节（英文标注、与本场无关的模块）还会抢注意力。
+1. **必须手画的**：原文没有对应图的（板 1 的五级台阶、板 6 的六条清单）、要常驻白板被反复指的（板 2 左栏 Agent Loop）、要现场"从零搭起来"建立叙事感的（板 7 的 ReAct 三框循环）、要边讲边加箭头的（板 10 选型表）。
+2. **优先投图的**：结构复杂、手绘费时且容易画歪的——决策质量曲线（图 1.3）、六维对比表（表 1.1）、演进阶梯（图 2.1）、Transformer（图 3.4）、多头注意力（图 3.5）、BPE 合并（表 3.1）。
+3. **代价与折中**：投屏图翻页即消失、没法随手补箭头、投影与手写来回切换会打断节奏；图里的细节（英文标注、与本场无关的模块）还会抢注意力。**折中做法：结构用原图，标注用手写**——把图投出来，再在旁边加箭头写关键词（例如投图 1.5 时补一句"这里回边就是 Agent Loop 的关键"）。
 
-> 一句话：**图当"证据 / 对照 / 省时间"，板书当"骨架 / 叙事"。**
+> 一句话：**图当"证据 / 对照 / 省时间"，板书当"骨架 / 叙事"；原文有图就别自己画。**
 
 **开场前默念三句话**：不念概念、念因果；每个术语都给一个类比；每章结束往右栏落一条可带走的结论。
 
@@ -107,6 +116,10 @@ Q：给 ChatGPT 说"帮我规划一次厦门之旅，预算 5000"
 
 ![图 1.3 智能体决策时间与质量关系图（反应式 / 混合式 / 规划式）](images/hello-agents/ch1-decision-quality-vs-time.png)
 ![表 1.1 传统智能体与 LLM 驱动智能体的核心对比（核心引擎 / 知识来源 / 处理指令 / 工作模式 / 泛化能力 / 开发范式）](images/hello-agents/ch1-traditional-vs-llm.jpg)
+![图 1.2 简单反射智能体的决策逻辑（恒温器：感知"房间温度 > 25℃" → 条件-动作规则 → 开始制冷）](images/hello-agents/ch1-simple-reflex-thermostat.png)
+![图 1.4 亚符号主义 / 符号主义 / 神经符号主义三种知识表示（对应系统 1 / 系统 2）](images/hello-agents/ch1-knowledge-paradigms.png)
+
+> 备选：表 1.2（PEAS：性能度量 / 环境 / 执行器 / 传感器）本场没展开，被问到"怎么定义任务环境"时可直接投。
 
 **🎤 口播要点**
 
@@ -209,8 +222,13 @@ ELIZA  →   SHRDLU   →   MYCIN/专家系统 → 心智社会  →  联结主�
 **🖼 原文配图**
 
 ![图 2.1 AI 智能体的演进阶梯（每级都标了"解决痛点 / 方案 / 新局限"）](images/hello-agents/ch2-evolution-stairs.png)
+![图 2.4 MYCIN 反向链推理流程（最高目标 → 规则 #578 IF A AND B THEN… → 子目标验证 A / B → 向医生提问）](images/hello-agents/ch2-mycin-backward-chaining.png)
+![图 2.6 "心智社会"中搭积木塔行为的涌现机制（BUILD-TOWER → BUILDER → ADD-BLOCK → FIND-BLOCK / GET-BLOCK → SEE / REACH / GRASP）](images/hello-agents/ch2-society-of-mind.png)
+![图 2.9 "预训练-微调"范式（通用文本 → 自监督学习 → 基座模型 LLM → 各任务微调）](images/hello-agents/ch2-pretrain-finetune.png)
 ![图 2.8 强化学习的核心交互循环](images/hello-agents/ch2-rl-loop.png)
 ![图 2.11 智能体发展演进时间线（原文以表格形式给出）](images/hello-agents/ch2-timeline-table.png)
+
+> 备选：图 2.2 物理符号系统的构成元素、图 2.3 专家系统的通用架构、图 2.5 SHRDLU 的"积木世界"交互界面、图 2.7 符号主义 vs 联结主义范式对比（后两张文件较大，见 5.5 图库）。
 
 **🎤 口播要点**
 
@@ -246,6 +264,9 @@ Attention = softmax(Q·Kᵀ / √d_k) · V
 
 **🖼 原文配图**
 
+![图 3.1 马尔可夫假设示意图（完整链式法则 vs Bigram 只看前一个词）](images/hello-agents/ch3-markov-assumption.png)
+![图 3.2 神经网络语言模型架构示意图（输入层 → 隐藏层 → Softmax → 预测下一个词）](images/hello-agents/ch3-nnlm-architecture.png)
+![图 3.3 RNN 结构示意图（隐藏状态 h 像"短期记忆"逐词传递，但只能串行）](images/hello-agents/ch3-rnn-structure.png)
 ![图 3.4 Transformer 整体架构图](images/hello-agents/ch3-transformer-architecture.png)
 ![图 3.5 多头注意力机制（Q/K/V → Scaled Dot-Product Attention → Concat → Linear）](images/hello-agents/ch3-multi-head-attention.png)
 
@@ -273,6 +294,10 @@ Attention = softmax(Q·Kᵀ / √d_k) · V
 6 能力涌现：CoT、指令遵循、多步规划要到数百亿~千亿参数才显著
    → 基座规模决定 Agent 上限（Chinchilla：70B 用 4 倍数据反超 175B GPT-3）
 ```
+
+**🖼 原文配图**
+
+![表 3.1 BPE 算法合并过程示例（最高频词元对逐轮合并 → 词表从 6 涨到 10）](images/hello-agents/ch3-bpe-merge-table.png)
 
 **🎤 口播要点**
 
@@ -538,12 +563,12 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 
 ---
 
-### 5.5 原文配图库（16 张，可直接投屏 / 打印）
+### 5.5 原文配图库（28 张，可直接投屏 / 打印）
 
 > 全部取自原文 `docs/images/`，已按章节整理到 `images/hello-agents/`。
 > 来源：[datawhalechina/hello-agents](https://github.com/datawhalechina/hello-agents) · 授权 **CC BY-NC-SA 4.0**（署名—非商业性使用—相同方式共享），此处仅用于学习分享。
 >
-> **收录说明**：图 1.1（环境—感知—行动示意图）与图 1.5 功能重叠、且单文件 1.15 MB，未重复收录；图 1.2、图 1.4 体积小，作为第 1 章口头举例时的备选图。
+> **收录说明**：第 1–4 章共 29 张图，收 28 张。未收 **图 2.12 AI Agent 技术栈概览**（单文件 4.3 MB，且第 1–4 章用不上）、**图 1.1 环境—感知—行动示意图**（与图 1.5 功能重叠，且 1.15 MB）。
 > **格式说明**：原文 `1-figures/1757242319667-2.png`（表 1.1）字节实际是 **JPEG**（扩展名与内容不符），本稿按真实格式存为 `ch1-traditional-vs-llm.jpg`，避免部分渲染器拒读。
 
 | 对应板 | 原文图 | 文件 |
@@ -552,13 +577,25 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 | 板 2 / 板 11 | 图 2.10 LLM 驱动的智能体核心组件架构 | `ch2-llm-agent-architecture.png` |
 | 板 1 | 图 1.3 智能体决策时间与质量关系图 | `ch1-decision-quality-vs-time.png` |
 | 板 1 | 表 1.1 传统智能体与 LLM 驱动智能体对比 | `ch1-traditional-vs-llm.jpg` |
-| 板 1（备选） | 图 1.2 简单反射智能体（恒温器） | `ch1-simple-reflex-thermostat.png` |
-| 板 1（备选） | 图 1.4 亚符号 / 符号 / 神经符号三种知识表示 | `ch1-knowledge-paradigms.png` |
+| 板 1 | 图 1.2 简单反射智能体（恒温器） | `ch1-simple-reflex-thermostat.png` |
+| 板 1 | 图 1.4 亚符号 / 符号 / 神经符号三种知识表示 | `ch1-knowledge-paradigms.png` |
+| 板 1（备选） | 表 1.2 智能旅行助手的 PEAS 描述 | `ch1-peas-table.png` |
 | 板 3 | 图 1.6 Workflow 和 Agent 的差异 | `ch1-workflow-vs-agent.png` |
 | 板 4 | 图 2.1 AI 智能体的演进阶梯 | `ch2-evolution-stairs.png` |
+| 板 4 | 图 2.4 MYCIN 反向链推理流程 | `ch2-mycin-backward-chaining.png` |
+| 板 4 | 图 2.6 "心智社会"搭积木塔的涌现机制 | `ch2-society-of-mind.png` |
+| 板 4 | 图 2.9 "预训练-微调"范式 | `ch2-pretrain-finetune.png` |
+| 板 4（备选） | 图 2.2 物理符号系统的构成元素 | `ch2-physical-symbol-system.png` |
+| 板 4（备选） | 图 2.3 专家系统的通用架构 | `ch2-expert-system-architecture.png` |
+| 板 4（备选） | 图 2.5 SHRDLU 的"积木世界"交互界面 | `ch2-shrdlu-blocks-world.png` |
+| 板 4（备选） | 图 2.7 符号主义 vs 联结主义范式对比 | `ch2-symbolism-vs-connectionism.png` |
 | 板 4 | 图 2.8 强化学习的核心交互循环 | `ch2-rl-loop.png` |
 | 板 4 | 图 2.11 智能体发展演进时间线 | `ch2-timeline-table.png` |
+| 板 5 | 图 3.1 马尔可夫假设示意图 | `ch3-markov-assumption.png` |
+| 板 5 | 图 3.2 神经网络语言模型架构示意图 | `ch3-nnlm-architecture.png` |
+| 板 5 | 图 3.3 RNN 结构示意图 | `ch3-rnn-structure.png` |
 | 板 5 | 图 3.4 Transformer 整体架构图 | `ch3-transformer-architecture.png` |
+| 板 6 | 表 3.1 BPE 算法合并过程示例 | `ch3-bpe-merge-table.png` |
 | 板 5 | 图 3.5 多头注意力机制 | `ch3-multi-head-attention.png` |
 | 板 7 | 图 4.1 ReAct 协同循环 | `ch4-react-loop.png` |
 | 板 8 | 图 4.2 Plan-and-Solve 两阶段工作流 | `ch4-plan-and-solve.png` |
@@ -628,3 +665,63 @@ Token 成本       高（每步1次调用）    中（2+n）             最高�
 **图 4.4（表 4.1）不同 Agent Loop 的选择策略**（板 10）
 
 ![图 4.4 不同 Agent Loop 的选择策略](images/hello-agents/ch4-paradigm-selection.png)
+
+---
+
+### 5.6 补充配图（第 1–3 章，按板序；板内已引用，这里集中放大看）
+
+**图 1.2 简单反射智能体（恒温器）**（板 1）
+
+![图 1.2 简单反射智能体的决策逻辑示意图](images/hello-agents/ch1-simple-reflex-thermostat.png)
+
+**图 1.4 亚符号 / 符号 / 神经符号三种知识表示**（板 1）
+
+![图 1.4 亚符号主义、符号主义与神经符号混合主义](images/hello-agents/ch1-knowledge-paradigms.png)
+
+**表 1.2 智能旅行助手的 PEAS 描述**（板 1 备选）
+
+![表 1.2 智能旅行助手的 PEAS 描述](images/hello-agents/ch1-peas-table.png)
+
+**图 2.2 物理符号系统的构成元素**（板 4 备选）
+
+![图 2.2 物理符号系统的构成元素](images/hello-agents/ch2-physical-symbol-system.png)
+
+**图 2.3 专家系统的通用架构**（板 4 备选）
+
+![图 2.3 专家系统的通用架构](images/hello-agents/ch2-expert-system-architecture.png)
+
+**图 2.4 MYCIN 反向链推理流程**（板 4）
+
+![图 2.4 MYCIN 反向链推理流程示意图](images/hello-agents/ch2-mycin-backward-chaining.png)
+
+**图 2.5 SHRDLU 的"积木世界"交互界面**（板 4 备选）
+
+![图 2.5 SHRDLU 的"积木世界"交互界面](images/hello-agents/ch2-shrdlu-blocks-world.png)
+
+**图 2.6 "心智社会"中搭积木塔行为的涌现机制**（板 4）
+
+![图 2.6 "心智社会"中搭建积木塔行为的涌现机制示意图](images/hello-agents/ch2-society-of-mind.png)
+
+**图 2.7 符号主义与联结主义范式对比**（板 4 备选）
+
+![图 2.7 符号主义与联结主义范式对比](images/hello-agents/ch2-symbolism-vs-connectionism.png)
+
+**图 2.9 "预训练-微调"范式示意图**（板 4）
+
+![图 2.9 "预训练-微调"范式示意图](images/hello-agents/ch2-pretrain-finetune.png)
+
+**图 3.1 马尔可夫假设示意图**（板 5）
+
+![图 3.1 马尔可夫假设示意图](images/hello-agents/ch3-markov-assumption.png)
+
+**图 3.2 神经网络语言模型架构示意图**（板 5）
+
+![图 3.2 神经网络语言模型架构示意图](images/hello-agents/ch3-nnlm-architecture.png)
+
+**图 3.3 RNN 结构示意图**（板 5）
+
+![图 3.3 RNN 结构示意图](images/hello-agents/ch3-rnn-structure.png)
+
+**表 3.1 BPE 算法合并过程示例**（板 6）
+
+![表 3.1 BPE 算法合并过程示例](images/hello-agents/ch3-bpe-merge-table.png)
