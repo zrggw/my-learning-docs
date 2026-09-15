@@ -3,16 +3,16 @@
 > 用途：从"照抄他人 Makefile"到"自己能写、能改、能排错"的路线图 + 要点笔记。面向**熟悉 C/C++ 与 gcc 命令行，但没系统写过 Makefile**的读者。
 > 使用方式：每学完一个小点，把 `[ ]` 改成 `[x]`；需要展开某节可随时让我补充。
 > 定位：讲清 **make 依据什么判定需要重新编译，以及 Makefile 的正确写法**，重点是**增量构建**与**依赖关系**。
-> 背景贴合：你已在学 C 语言高级内容（`c-advanced-learning.md`）与 CMake（`cmake-learning-guide.md`）——本文补上"手写构建脚本"这一层，理解 CMake 生成的 Makefile 到底长什么样。
+> 背景贴合：你已在学 C 语言高级内容（`c-advanced-learning.md`）与 CMake（`cmake-learning-guide.md`）——本文补上"手写构建脚本"这一层，理解 CMake 生成的 Makefile 的实际内容。
 > 前提：以 **GNU make 4.x** 与 gcc/clang 为例；Windows 上用 MinGW/MSYS2 的 `make`（原生 `nmake` 语法不同，见 6.3）。
 
 ---
 
-## 核心速览（先看这一页，5 分钟抓住 80%）
+## 核心速览（先看这一页，5 分钟覆盖 80% 内容）
 
-**一句话定位**：make 是**时间戳驱动的增量构建工具**——它只重新生成"比依赖更旧"的目标；Makefile 是你写给它的"产物 + 输入 + 怎么造"的清单。
+**一句话定位**：make 是**时间戳驱动的增量构建工具**，只重新生成"比依赖更旧"的目标；Makefile 描述的是"产物、输入与生成方式"。
 
-**① 最小可用 Makefile**（照抄即可编译多文件工程）
+**① 最小可用 Makefile**（可直接复用于多文件工程）
 
 ```make
 CC      := gcc
@@ -39,7 +39,7 @@ make -j8        # 并行构建（8 路）
 make clean      # 清理
 ```
 
-> ⚠️ 命令行的缩进**必须是 TAB**，不能是空格——这是 Makefile 最常见的错误（报 `missing separator`）。
+> 注意：命令行的缩进**必须是 TAB**，不能是空格——这是 Makefile 最常见的错误（报 `missing separator`）。
 
 **② 五个核心概念**（Makefile 的心智模型）
 
@@ -101,7 +101,7 @@ make clean      # 清理
 
 > 记法：**gcc 管"怎么编一个文件"，make 管"该编哪些文件"，CMake 管"整个工程怎么组织"。**
 
-### 1.2 最小可运行的 Makefile（先跑通）
+### 1.2 最小可运行的 Makefile
 
 - [ ] **目录结构**：
 
@@ -442,7 +442,7 @@ make clean      # 清理
   $(warning BUILD 未设置，使用默认值)  # 警告，继续执行
   $(error 必须先设置 CROSS_COMPILE)   # 报错并停止
   ```
-- [ ] **查看某条规则到底是什么**：`make -p | grep -A3 '^build/main.o'`；或 `make --debug=b 目标` 看 make 的推导链。
+- [ ] **查看某条规则的实际定义**：`make -p | grep -A3 '^build/main.o'`；或 `make --debug=b 目标` 看 make 的推导链。
 - [ ] **清理与重建**：`make clean && make`；顽固问题 `make -B`。
 
 > 记法：**调依赖用 `--debug=b`，查变量用 `$(info)`，验证命令用 `-n`，一次性看全部错误用 `-k`。**
@@ -577,7 +577,7 @@ make clean      # 清理
 | 5 | 5 | 命令与调试 | 会用 `-n` / `-B` / `-k` / `--debug=b` / `$(info)` | ☐ |
 | 6 | 6 | 排错 | 能区分三类报错（缩进 / 缺规则 / 链接），会清理后重建 | ☐ |
 
-> 时间紧的读法：**核心速览 → 第 1 节 → 第 4 节 → 第 6 节 → 附录 A**。第 4 节是"手写 Makefile 到底专不专业"的分水岭。
+> 时间紧的读法：**核心速览 → 第 1 节 → 第 4 节 → 第 6 节 → 附录 A**。第 4 节决定 Makefile 是否规范。
 
 ---
 

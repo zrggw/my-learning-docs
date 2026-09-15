@@ -8,11 +8,11 @@
 
 ---
 
-## 核心速览（先看这一页，5 分钟抓住 80%）
+## 核心速览（先看这一页，5 分钟覆盖 80% 内容）
 
 **一句话定位**：CMake = 用声明式脚本描述"工程结构"，再自动生成各平台的编译配置。它是**生成构建脚本的构建脚本**，编译本身仍交给 gcc / MSVC / Ninja。
 
-**① 最小可用工程**（三行 + 两条命令就能跑）
+**① 最小可用工程**（三行配置 + 两条命令即可运行）
 
 ```cmake
 cmake_minimum_required(VERSION 3.16)
@@ -103,7 +103,7 @@ target_compile_options(myapp PRIVATE -Wall -Wextra)
 
 > 记法：CMake 是"中间层"——你写一份声明，它帮你生成 Makefile / VS 工程 / Ninja。
 
-### 1.2 最小可运行示例（先跑通）
+### 1.2 最小可运行示例
 
 - [ ] **目录结构**：
 
@@ -193,7 +193,7 @@ target_compile_options(myapp PRIVATE -Wall -Wextra)
 
 > 记法：现代 CMake 的三大件是 `add_executable` / `add_library` + `target_*` 加属性。**作用于目标（target）比"全局 set 变量"更干净**，这正是"现代 CMake"与老写法的区别。
 
-### 2.2 作用域：`PRIVATE` / `PUBLIC` / `INTERFACE`（最容易搞错）
+### 2.2 作用域：`PRIVATE` / `PUBLIC` / `INTERFACE`（重点）
 
 - [ ] **三种作用域**：
   - `PRIVATE`：只对本目标生效，依赖**不传播**给下游
