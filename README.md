@@ -11,6 +11,7 @@
 - [C++ → Go 算法题快速转换指南](cpp-to-go-cheatsheet.md)
 - [Go 语言学习框架（C++ 背景版）](go-learning-framework.md)
 - [Hello-Agents 第 1–4 章精读：25 分钟白板分享稿](hello-agents-ch1-4-sharing.md)
+- [Makefile 学习指南（C/C++ 手工构建）](makefile-learning-guide.md)
 - [MCP（Model Context Protocol）学习指南](mcp-learning-guide.md)
 
 ## 在线阅读
