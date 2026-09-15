@@ -4,31 +4,88 @@
 > 使用方式：每学完一个小点，把 `[ ]` 改成 `[x]`；需要展开某节可随时让我补充。
 > 定位：解决 **"CMakeLists.txt 到底在干嘛、怎么写、怎么排错"**，从"能编过一个项目"到"能写一个规范的现代 CMake 工程"。
 > 背景贴合：你已在学 C 语言高级内容（`c-advanced-learning.md`），本文档补上"怎么用 CMake 组织 C/C++ 工程"这一课。
-> 前提：示例基于 **CMake 3.16+**（`CMakePresets.json` 需 3.19+）；代码示例统一用 `cmake -S . -B build` 风格。
-
-## 章节速览
-
-| 阶段 | 章节 | 一句话 |
-|---|---|---|
-| 入门 | 1. CMake 是什么 | 它是"生成构建脚本的构建脚本"，管工程层面 |
-| 入门 | 2. 最小可运行示例 | 两段式：配置 → 构建，先跑通再说 |
-| 核心 | 3. 核心语法 | 变量、目标、`target_*` 三件套 |
-| 核心 | 4. 作用域 | `PRIVATE` / `PUBLIC` / `INTERFACE`（最容易搞错） |
-| 核心 | 5. 工程组织 | `src`/`include` 规范目录 + 子目录工程 |
-| 核心 | 6. 构建与使用库 | 造静态/动态库、链外部库、`IMPORTED` 目标、导出自建库 |
-| 进阶 | 7. 依赖管理 | `find_package` 找已装、`FetchContent` 拉源码 |
-| 进阶 | 8. 配置与工具链 | `-D` / `-G` / `CMAKE_BUILD_TYPE` / 编译器 |
-| 进阶 | 9. 工具衔接 | IDE、`compile_commands.json`、presets、`install` |
-| 必备 | 10. 排错 | 报错对照表 + 三步法 + 清缓存重来 |
-| 附录 | A / B / C | 命令速查 / 进度表 / 后续扩展 |
-
-> 站点右侧另有自动大纲可跳转；此表用于快速判断"该看哪一节"。
+> 前提：示例基于 **CMake 3.16+**（`CMakePresets.json` 需 3.19+）；命令统一用 `cmake -S . -B build` 风格。
 
 ---
 
-## 1. CMake 是什么、为什么需要它
+## 核心速览（先看这一页，5 分钟抓住 80%）
 
-> 覆盖：CMake 的定位与职责边界、与 `gcc/g++` 的分工、最小概念模型。
+**一句话定位**：CMake = 用声明式脚本描述"工程结构"，再自动生成各平台的编译配置。它是**生成构建脚本的构建脚本**，编译本身仍交给 gcc / MSVC / Ninja。
+
+**① 最小可用工程**（三行 + 两条命令就能跑）
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(hello C)
+add_executable(hello main.c)
+```
+
+```bash
+cmake -S . -B build     # 配置阶段：读 CMakeLists.txt，生成构建文件
+cmake --build build     # 构建阶段：调编译器，产出可执行文件
+```
+
+**② 五个核心概念**（现代 CMake 的心智模型）
+
+| 概念 | 一句话 |
+|---|---|
+| **目标（target）** | 一切挂在目标上：`add_executable` / `add_library` 定义目标，其余属性都"加在目标上" |
+| **`target_*` 三件套** | `target_include_directories`（头文件）/ `target_compile_features`（标准）/ `target_link_libraries`（链接） |
+| **作用域** | `PRIVATE` 自私（只自己用）/ `INTERFACE` 利他（只给下游）/ `PUBLIC` 兼济（两边都用） |
+| **两阶段** | 配置（报错=脚本/依赖问题）→ 构建（报错=代码/链接问题）；改了 `CMakeLists.txt` 必须重新配置 |
+| **库即目标** | 自建库、外部库都用**目标名**链接，不要在业务里散写 `-I` / `-L` / 绝对库路径 |
+
+**③ 最小规范工程模板**（背下来即可开工：库 + 可执行文件 + 继承关系）
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(MyApp VERSION 1.0.0 LANGUAGES C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_library(mymath STATIC src/mymath.c)
+target_include_directories(mymath PUBLIC include)     # 使用者自动继承头文件路径
+
+add_executable(myapp src/main.c)
+target_link_libraries(myapp PRIVATE mymath)
+target_compile_options(myapp PRIVATE -Wall -Wextra)
+```
+
+**④ 高频命令 12 条**（完整版见附录 A）
+
+| 命令 | 用途 |
+|---|---|
+| `project(名 VERSION x LANGUAGES C)` | 声明工程 |
+| `add_executable` / `add_library(... STATIC/SHARED ...)` | 定义可执行文件 / 静态库 / 动态库 |
+| `target_include_directories(x PUBLIC dir)` | 头文件路径（带作用域传播） |
+| `target_compile_features` / `target_compile_options` | 编译标准 / 编译选项 |
+| `target_link_libraries(app PRIVATE lib)` | 链接依赖 |
+| `add_subdirectory(dir)` | 纳入子目录 |
+| `find_package(X REQUIRED)` + `X::X` | 用系统里的第三方库 |
+| `FetchContent_Declare` / `MakeAvailable` | 拉远程源码当依赖 |
+| `find_library` / `find_path` + `IMPORTED` 目标 | 用"只有库文件"的外部库 |
+| `option(名 "说明" ON)` | 定义开关（配 `-D`） |
+| `-D<变量>=<值>` / `-G <生成器>` / `-DCMAKE_BUILD_TYPE=Release` | 命令行三件套 |
+| `install(TARGETS ...)` / `install(EXPORT ...)` | 安装 / 把自己的库导出给别人用 |
+
+**⑤ 三大高频报错**（完整对照表见第 6 节）
+
+| 报错 | 第一反应 |
+|---|---|
+| `CMake Error: Could not find ...` | 库没装或路径不对 → 设 `CMAKE_PREFIX_PATH` / `XXX_ROOT` |
+| `undefined reference to ...` | 少链接了库 → 检查 `target_link_libraries` |
+| `No rule to make target ...` | 构建清单滞后 → 删掉 `build/` 重新配置 |
+
+**阅读路线**：只要跑通工程 → 第 1 节；要写规范工程 → 1–3 节；要造库 / 引第三方库 → 第 4 节；出问题 → 第 6 节；查命令 → 附录 A。
+
+---
+
+## 1. 快速上手：CMake 是什么 + 最小工程
+
+> 覆盖：CMake 的定位与职责边界、与 `gcc/g++` 的分工、最小工程与配置/构建两阶段。
+
+### 1.1 CMake 是什么、为什么需要它
 
 - [ ] **CMake**：跨平台的 C/C++ 构建系统（"Make 的跨平台替代"），本质是**生成构建脚本的构建脚本**
   - 输入：`CMakeLists.txt`（一种声明式脚本语言）
@@ -46,11 +103,7 @@
 
 > 记法：CMake 是"中间层"——你写一份声明，它帮你生成 Makefile / VS 工程 / Ninja。
 
----
-
-## 2. 最小可运行示例（先跑通）
-
-> 覆盖：目录结构、最小 `CMakeLists.txt` 逐行解释、配置/构建两阶段、运行验证。
+### 1.2 最小可运行示例（先跑通）
 
 - [ ] **目录结构**：
 
@@ -92,9 +145,11 @@
 
 ---
 
-## 3. 核心语法：变量、目标与 `target_*` 属性
+## 2. 核心语法与作用域
 
-> 覆盖：变量与引用、目标类型、`target_*` 三件套、编译标准与编译选项（集中在本文）。
+> 覆盖：变量与引用、目标类型、`target_*` 三件套、编译标准与选项、`PRIVATE`/`PUBLIC`/`INTERFACE` 的传播规则与常见误用。
+
+### 2.1 变量、目标与 `target_*`
 
 - [ ] **变量与变量引用**：
 
@@ -138,11 +193,7 @@
 
 > 记法：现代 CMake 的三大件是 `add_executable` / `add_library` + `target_*` 加属性。**作用于目标（target）比"全局 set 变量"更干净**，这正是"现代 CMake"与老写法的区别。
 
----
-
-## 4. 作用域：`PRIVATE` / `PUBLIC` / `INTERFACE`（重点）
-
-> 覆盖：三种作用域的语义与传播规则、判断口诀、常见误用。这是全篇最容易混淆、也最能体现"现代 CMake"的一节。
+### 2.2 作用域：`PRIVATE` / `PUBLIC` / `INTERFACE`（最容易搞错）
 
 - [ ] **三种作用域**：
   - `PRIVATE`：只对本目标生效，依赖**不传播**给下游
@@ -161,7 +212,7 @@
 
 ---
 
-## 5. 工程组织：规范目录与多目录工程
+## 3. 工程组织：规范目录与多目录工程
 
 > 覆盖：推荐目录结构、可直接套用的顶层 `CMakeLists.txt`、`add_subdirectory` 子模块、子目录 target 的串联方式。
 
@@ -207,11 +258,11 @@
 
 ---
 
-## 6. 构建与使用库：静态库 / 动态库 / 外部库
+## 4. 库与依赖：造库、用库、引第三方
 
-> 覆盖：在本工程里生成静态库与动态库、让本工程的其他目标使用它们、链接"外部"库的三种情形、静态与动态的取舍与运行期坑、把自己造的库导出给别的工程用。
+> 覆盖：在本工程里生成静态库/动态库、使用自己生成的库、使用外部库的三种情形、静态与动态的取舍与运行期坑、把自建库导出给别人用、第三方依赖（`find_package` / `FetchContent`）。
 
-### 6.1 在本工程里生成库
+### 4.1 在本工程里生成库
 
 - [ ] **三种库目标（`add_library` 的形态）**：
 
@@ -268,7 +319,7 @@
   - 或一把自动化（省事，但工程里有全局数据时不稳）：`set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)`
   - Windows 动态库会**同时**产出 `.dll`（运行时用）和 `.lib`（链接用的导入库），分发时两个都要给
 
-### 6.2 在本工程里使用自己生成的库
+### 4.2 在本工程里使用自己生成的库
 
 - [ ] **同工程内：`add_subdirectory` + `target_link_libraries`**，头文件路径由库自己 `PUBLIC` 声明，使用者无需重复写：
 
@@ -286,9 +337,9 @@
 
 - [ ] **跨目录但同一构建树**：只要是同一工程里的目标，一律用**目标名**链接（不要写 `-lmymath` 或库文件路径），CMake 才会自动处理依赖顺序与传播。
 
-### 6.3 使用"外部"库的三种情形
+### 4.3 使用"外部"库的三种情形
 
-- [ ] **情形 1：库提供了 CMake 支持（最省事）** → 详见 §7
+- [ ] **情形 1：库提供了 CMake 支持（最省事）** → 详见 4.6
 
   ```cmake
   find_package(ZLIB REQUIRED)
@@ -329,7 +380,7 @@
 
   - 为什么不好：路径写死不可移植；**不会传递头文件目录**；手写 `.a` 列表时**顺序敏感**（被依赖的库要放后面，GNU ld 是单遍扫描）
 
-### 6.4 静态库 vs 动态库：怎么选、会踩什么
+### 4.4 静态库 vs 动态库：怎么选、会踩什么
 
 | 维度 | 静态库 | 动态库 |
 |---|---|---|
@@ -343,12 +394,12 @@
   - 临时应急：`export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH`
   - 正规做法：配 RPATH——`set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")`（安装后生效），或用系统库目录
 - [ ] **坑 2：Windows 运行时找不到 `.dll`**：把 `.dll` 放到 exe 同目录，或把目录加进 `PATH`
-- [ ] **坑 3：Windows 链接期 `LNK2019 unresolved external symbol`**：符号没导出（见 6.1 的导出宏），或没链接导入库 `.lib`
+- [ ] **坑 3：Windows 链接期 `LNK2019 unresolved external symbol`**：符号没导出（见 4.1 的导出宏），或没链接导入库 `.lib`
 - [ ] **坑 4：静态库出现 `undefined reference`**：`target_link_libraries` 的顺序/依赖没写对；用**目标名**链接可让 CMake 自动排布
 
 > 记法：**自己造的库，用 `PUBLIC`/`INTERFACE` 把"头文件路径 + 编译要求 + 依赖"包进目标**；外部库优先用它自带的 CMake 配置（`X::X`），没有就自己包一个 `IMPORTED` 目标——**永远不要在业务 target 上散写 `-I`/`-L`/绝对库路径**。
 
-### 6.5 进阶：把本工程的库导出给别的工程用（install + EXPORT）
+### 4.5 进阶：把自建库导出给别的工程用（install + EXPORT）
 
 ```cmake
 install(TARGETS mymath EXPORT mymathTargets
@@ -371,11 +422,7 @@ target_link_libraries(app PRIVATE mymath::mymath)
 
 （想打成安装包用 CPack，见附录 C。）
 
----
-
-## 7. 依赖管理：`find_package` 与 `FetchContent`
-
-> 覆盖：`find_package` 的用法与两种模式、找不到库时的兜底、`FetchContent` 拉源码、两者的选择标准。
+### 4.6 第三方依赖：`find_package` 与 `FetchContent`
 
 - [ ] **`find_package`（找系统已安装的库）**：
 
@@ -422,9 +469,11 @@ target_link_libraries(app PRIVATE mymath::mymath)
 
 ---
 
-## 8. 配置与工具链：选项、构建类型、生成器、编译器
+## 5. 配置、工具链与工程化衔接
 
-> 覆盖：`option` 开关、`CMAKE_BUILD_TYPE`、生成器（`-G`）、指定编译器、命令行传参（`-D`）。
+> 覆盖：`option` 开关、`CMAKE_BUILD_TYPE`、生成器（`-G`）、指定编译器、`-D` 传参；以及与 C++ / IDE / 静态分析工具的衔接（含 `install` 与 presets）。
+
+### 5.1 选项与构建类型
 
 - [ ] **`option`（开关，可让用户用 `-D` 打开/关闭）**：
 
@@ -437,6 +486,9 @@ target_link_libraries(app PRIVATE mymath::mymath)
 
 - [ ] **`CMAKE_BUILD_TYPE`（编译配置）**：`Debug` / `Release` / `RelWithDebInfo` / `MinSizeRel`
   - 一般 `Release` 开 `-O2/-O3`，`Debug` 加符号 `-g` 且不优化（利于 gdb 调试）
+
+### 5.2 生成器、编译器与命令行
+
 - [ ] **生成器（generator：底层用哪个构建工具）**：
   - 默认：Unix 用 `Unix Makefiles`；Windows 用 Visual Studio 工程
   - 换更快的：`-G Ninja`（跨平台，推荐）；Windows 上用 MinGW 工具链时选 `-G "MinGW Makefiles"`
@@ -455,11 +507,7 @@ target_link_libraries(app PRIVATE mymath::mymath)
 
 > 记法：`-D` 传变量、`-G` 选生成器、`-DCMAKE_BUILD_TYPE` 选优化级别，这三个参数覆盖绝大多数场景。
 
----
-
-## 9. 与 IDE / 实际工具的衔接（含安装打包，进阶）
-
-> 覆盖：写 C++ 工程、CMake 与 Makefile 的关系、IDE 集成、`compile_commands.json`、`CMakePresets.json`、`install` 安装规则。
+### 5.3 与 C++ / IDE / 工具链衔接（进阶）
 
 - [ ] **写 C++ 项目**：`project(... LANGUAGES C CXX)`，用 `target_compile_features(app PRIVATE cxx_std_17)` 指定标准。
 - [ ] **CMake 与 Makefile 的关系**：CMake 生成 Makefile（或 Ninja / VS 工程），实际编译仍由这些底层构建工具执行。
@@ -472,15 +520,15 @@ target_link_libraries(app PRIVATE mymath::mymath)
 
   产出后供 clangd / clang-tidy 等做精确跳转与检查。
 - [ ] 【进阶】**`CMakePresets.json`（现代工程规范）**：把常用配置 / 构建命令存成 preset，一键复用（CMake 3.19+）。
-- [ ] 【进阶】**安装规则 `install`**：`install(TARGETS ... DESTINATION ...)` 把库 / 头文件 / 可执行文件装到系统或指定目录；配合前面的 `project(... VERSION ...)` 可实现版本化安装（打包 CPack 见附录 C）。
+- [ ] 【进阶】**安装规则 `install`**：`install(TARGETS ... DESTINATION ...)` 把库 / 头文件 / 可执行文件装到系统或指定目录；配合前面的 `project(... VERSION ...)` 可实现版本化安装（导出给别的工程见 4.5，打包 CPack 见附录 C）。
 
 > 记法：CMake 只做"构建编排"，真正编译交给底层工具；IDE 通过读 `CMakeLists.txt` 或 `compile_commands.json` 干活。
 
 ---
 
-## 10. 常见报错与排错（重点）
+## 6. 常见报错与排错（重点）
 
-> 覆盖：高频报错对照表、排错三步法、清缓存重来。排查时先回到第 2 节的"配置 / 构建两阶段"判断。
+> 覆盖：高频报错对照表、排错三步法、清缓存重来。排查时先回到 1.2 节的"配置 / 构建两阶段"判断。
 
 - [ ] **高频报错对照表**：
 
@@ -493,9 +541,9 @@ target_link_libraries(app PRIVATE mymath::mymath)
   | `undefined reference to ...` | 链接时找不到符号 | 没 `target_link_libraries` 到对应库，或库没被包含 |
   | `No rule to make target ...` | 构建清单滞后 | 重新配置：`cmake -S . -B build` |
   | `fatal error: xxx.h: No such file` | 头文件路径没配 | `target_include_directories` 加路径 |
-  | `error while loading shared libraries: libxxx.so` | 运行时找不到动态库 | 配 `LD_LIBRARY_PATH` 或 RPATH（见 §6.4） |
-  | `LNK2019 / LNK1120 unresolved external symbol`（MSVC） | 符号未导出，或没链接导入库 `.lib` | 导出符号、链接 `.lib`（见 §6.1） |
-  | `cannot find -lmymath` | 库搜索路径没给或名字不对 | 用 `IMPORTED` 目标，或 `target_link_directories`（见 §6.3） |
+  | `error while loading shared libraries: libxxx.so` | 运行时找不到动态库 | 配 `LD_LIBRARY_PATH` 或 RPATH（见 4.4） |
+  | `LNK2019 / LNK1120 unresolved external symbol`（MSVC） | 符号未导出，或没链接导入库 `.lib` | 导出符号、链接 `.lib`（见 4.1） |
+  | `cannot find -lmymath` | 库搜索路径没给或名字不对 | 用 `IMPORTED` 目标，或 `target_link_directories`（见 4.3） |
 
 - [ ] **排错三步法**：
   1. **先判断是配置报错还是构建报错**（阶段不同，处理方向完全不同）
@@ -521,31 +569,31 @@ target_link_libraries(app PRIVATE mymath::mymath)
 
 | 命令 / 变量 | 用途 | 见 |
 |---|---|---|
-| `cmake_minimum_required(VERSION x.y)` | 声明最低版本（必须第一行） | §2 |
-| `project(名 LANGUAGES C CXX VERSION x)` | 声明工程、语言、版本 | §2 / §5 |
-| `add_executable` / `add_library` | 定义可执行文件 / 库目标 | §3 |
-| `add_library(x STATIC/SHARED src...)` | 生成静态库 / 动态库 | §6.1 |
-| `set(BUILD_SHARED_LIBS ON)` | 让 `add_library(x src...)` 默认产出动态库 | §6.1 |
-| `set_target_properties(... VERSION/SOVERSION/OUTPUT_NAME)` | 动态库版本号、输出名、输出目录 | §6.1 |
-| `POSITION_INDEPENDENT_CODE` | 静态库要被链进动态库时需开 | §6.1 |
-| `CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS` / `generate_export_header` | Windows 动态库导出符号 | §6.1 |
-| `add_library(x STATIC IMPORTED)` + `IMPORTED_LOCATION` / `IMPORTED_IMPLIB` | 把外部库文件包装成目标 | §6.3 |
-| `find_library` / `find_path` | 找外部库文件 / 头文件目录 | §6.3 |
-| `pkg_check_modules(... IMPORTED_TARGET)` | 用 pkg-config 引入外部库 | §6.3 |
-| `install(TARGETS ... EXPORT ...)` + `install(EXPORT ...)` | 把自己造的库导出给别的工程 `find_package` | §6.5 |
-| `target_include_directories` | 目标级头文件路径 | §3 |
-| `target_compile_features` / `target_compile_options` | 编译标准 / 编译选项 | §3 |
-| `target_link_libraries` | 目标级链接依赖（配 `PRIVATE/PUBLIC/INTERFACE`） | §3 / §4 |
-| `set(变量 值)` / `${变量}` | 定义 / 引用变量 | §3 |
-| `add_subdirectory(dir)` | 纳入子目录工程 | §5 |
-| `find_package(X REQUIRED)` | 查找提供 CMake 配置的库 | §7 |
-| `FetchContent_Declare` / `MakeAvailable` | 拉取远程源码依赖 | §7 |
-| `option(名 "说明" ON)` | 定义开关 | §8 |
-| `cmake -S . -B build` | 配置（生成构建文件） | §2 |
-| `cmake --build build` | 构建 | §2 |
-| `-D<变量>=<值>` / `-G <生成器>` | 传变量 / 选生成器 | §8 |
-| `-DCMAKE_BUILD_TYPE=Release` | 选优化级别 | §8 |
-| `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` | 生成 `compile_commands.json` | §9 |
+| `cmake_minimum_required(VERSION x.y)` | 声明最低版本（必须第一行） | 1.2 |
+| `project(名 LANGUAGES C CXX VERSION x)` | 声明工程、语言、版本 | 1.2 / 3 |
+| `add_executable` / `add_library` | 定义可执行文件 / 库目标 | 2.1 |
+| `add_library(x STATIC/SHARED src...)` | 生成静态库 / 动态库 | 4.1 |
+| `set(BUILD_SHARED_LIBS ON)` | 让 `add_library(x src...)` 默认产出动态库 | 4.1 |
+| `set_target_properties(... VERSION/SOVERSION/OUTPUT_NAME)` | 动态库版本号、输出名、输出目录 | 4.1 |
+| `POSITION_INDEPENDENT_CODE` | 静态库要被链进动态库时需开 | 4.1 |
+| `CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS` / `generate_export_header` | Windows 动态库导出符号 | 4.1 |
+| `add_library(x STATIC IMPORTED)` + `IMPORTED_LOCATION` / `IMPORTED_IMPLIB` | 把外部库文件包装成目标 | 4.3 |
+| `find_library` / `find_path` | 找外部库文件 / 头文件目录 | 4.3 |
+| `pkg_check_modules(... IMPORTED_TARGET)` | 用 pkg-config 引入外部库 | 4.3 |
+| `install(TARGETS ... EXPORT ...)` + `install(EXPORT ...)` | 把自己造的库导出给别的工程 `find_package` | 4.5 |
+| `find_package(X REQUIRED)` | 查找提供 CMake 配置的库 | 4.6 |
+| `FetchContent_Declare` / `MakeAvailable` | 拉取远程源码依赖 | 4.6 |
+| `target_include_directories` | 目标级头文件路径 | 2.1 |
+| `target_compile_features` / `target_compile_options` | 编译标准 / 编译选项 | 2.1 |
+| `target_link_libraries` | 目标级链接依赖（配 `PRIVATE/PUBLIC/INTERFACE`） | 2.1 / 2.2 |
+| `set(变量 值)` / `${变量}` | 定义 / 引用变量 | 2.1 |
+| `add_subdirectory(dir)` | 纳入子目录工程 | 3 |
+| `option(名 "说明" ON)` | 定义开关 | 5.1 |
+| `cmake -S . -B build` | 配置（生成构建文件） | 1.2 |
+| `cmake --build build` | 构建 | 1.2 |
+| `-D<变量>=<值>` / `-G <生成器>` | 传变量 / 选生成器 | 5.2 |
+| `-DCMAKE_BUILD_TYPE=Release` | 选优化级别 | 5.1 |
+| `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` | 生成 `compile_commands.json` | 5.3 |
 
 ---
 
@@ -553,28 +601,26 @@ target_link_libraries(app PRIVATE mymath::mymath)
 
 | 阶段 | 对应章节 | 内容 | 目标 | 状态 |
 |---|---|---|---|---|
-| 1 | §1 | 概念与最小示例 | 说得清 CMake 在构建链里的位置 | ☐ |
-| 2 | §2 | 跑通第一个工程 | 会用 `-S`/`-B` 完成配置 + 构建 | ☐ |
-| 3 | §3 | 核心命令 | 会用 `add_*` / `set` / `${}` / `target_*` | ☐ |
-| 4 | §4 | 作用域 | 会判断该写 `PRIVATE` / `PUBLIC` / `INTERFACE` | ☐ |
-| 5 | §5 | 工程组织 | 搭一个规范的 `src`/`include` 多目录工程 | ☐ |
-| 6 | §6 | 构建与使用库 | 会造静态/动态库，会链外部库（含 `IMPORTED` 目标） | ☐ |
-| 7 | §7 | 依赖管理 | 会用 `find_package` 与 `FetchContent` | ☐ |
-| 8 | §8 | 配置与工具链 | 会用 `-D` / `-G` / `CMAKE_BUILD_TYPE` | ☐ |
-| 9 | §9 | 工具衔接（进阶） | 会出 `compile_commands.json`、了解 presets | ☐ |
-| 10 | §10 | 排错 | 能区分配置错与构建错，会清缓存重来 | ☐ |
+| 1 | 1 | 概念 + 最小工程 | 说得清 CMake 在构建链里的位置，会用 `-S`/`-B` 跑通工程 | ☐ |
+| 2 | 2 | 核心语法与作用域 | 会用 `add_*` / `set` / `${}` / `target_*`，会判断 `PRIVATE`/`PUBLIC`/`INTERFACE` | ☐ |
+| 3 | 3 | 工程组织 | 搭一个规范的 `src`/`include` 多目录工程 | ☐ |
+| 4 | 4 | 库与依赖 | 会造静态/动态库，会链外部库（含 `IMPORTED` 目标）、会用 `find_package`/`FetchContent` | ☐ |
+| 5 | 5 | 配置与工具链 | 会用 `-D` / `-G` / `CMAKE_BUILD_TYPE`，会出 `compile_commands.json` | ☐ |
+| 6 | 6 | 排错 | 能区分配置错与构建错，会清缓存重来 | ☐ |
+
+> 时间紧的读法：**核心速览 → 第 1 节 → 第 6 节 → 附录 A**，就能覆盖日常 80% 的活；第 4 节在做库/接第三方库时再回来精读。
 
 ---
 
 ## 附录 C 后续扩展（当前缺口）
 
-正文 10 节已覆盖"能写规范工程 + 能造库/用库 + 能排错"的主干，以下为**尚未展开**的部分（斜体为正文已有雏形、待补完整示例）：
+正文 6 节已覆盖"能写规范工程 + 能造库/用库 + 能排错"的主干，以下为**尚未展开**的部分（斜体为正文已有雏形、待补完整示例）：
 
 1. 完整可运行示例工程（顶层 + 子目录 + 一个静态库 + 一个动态库 + 测试，可 `git clone` 直接跑）
 2. `find_package` 与 `FetchContent` 的完整对比示例（含离线 / 内网镜像场景）
-3. *符号可见性、ABI 兼容与 `SOVERSION`* 的深入（正文 §6.1 只给了版本号写法）
-4. *打包*：用 CPack 生成 deb / rpm / zip / NSIS 安装包，以及 `configure_file` 生成版本配置头（正文 §6.5 已给 `install` / `EXPORT` 雏形）
-5. *排错反例集*：把 §10 的对照表补成"可复现的最小错误工程 + 修法"
+3. *符号可见性、ABI 兼容与 `SOVERSION`* 的深入（正文 4.1 只给了版本号写法）
+4. *打包*：用 CPack 生成 deb / rpm / zip / NSIS 安装包，以及 `configure_file` 生成版本配置头（正文 4.5 已给 `install` / `EXPORT` 雏形）
+5. *排错反例集*：把第 6 节的对照表补成"可复现的最小错误工程 + 修法"
 6. 交叉编译与工具链文件（`CMAKE_TOOLCHAIN_FILE`）——嵌入式 / ARM / Android 场景
 
 > 告诉我"从第 X 节开始填充"或"填充某节"，我会按框架逐节展开。
