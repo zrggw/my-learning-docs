@@ -1,8 +1,8 @@
 # CMake 学习指南（C/C++ 构建系统）
 
-> 用途：从零到上手 CMake 的路线图 + 要点笔记。面向**熟悉 C/C++ 但没用过 CMake（或只抄过别人 CMakeLists）**的读者。
+> 用途：从零到上手 CMake 的路线图 + 要点笔记。面向**熟悉 C/C++ 但没用过 CMake（或仅照抄过他人 CMakeLists）**的读者。
 > 使用方式：每学完一个小点，把 `[ ]` 改成 `[x]`；需要展开某节可随时让我补充。
-> 定位：解决 **"CMakeLists.txt 到底在干嘛、怎么写、怎么排错"**，从"能编过一个项目"到"能写一个规范的现代 CMake 工程"。
+> 定位：解决 **CMakeLists.txt 的作用、写法与排错**，从"能编过一个项目"到"能写一个规范的现代 CMake 工程"。
 > 背景贴合：你已在学 C 语言高级内容（`c-advanced-learning.md`），本文档补上"怎么用 CMake 组织 C/C++ 工程"这一课。
 > 前提：示例基于 **CMake 3.16+**（`CMakePresets.json` 需 3.19+）；命令统一用 `cmake -S . -B build` 风格。
 
@@ -208,7 +208,7 @@ target_compile_options(myapp PRIVATE -Wall -Wextra)
   - 用 `include_directories()`（全局、旧式）代替 `target_include_directories()`（目标级、推荐）——前者会把路径泄漏给所有目标
   - 库的头文件目录写成 `PRIVATE`，导致下游 `#include` 不到
 
-> 记法：**`PRIVATE` 自私、`INTERFACE` 利他、`PUBLIC` 兼济**；拿不准时先写 `PRIVATE`，编不过再放宽。
+> 记法：**`PRIVATE` 自私、`INTERFACE` 利他、`PUBLIC` 兼济**；不确定时先写 `PRIVATE`，编译失败再放宽。
 
 ---
 
@@ -254,13 +254,13 @@ target_compile_options(myapp PRIVATE -Wall -Wextra)
 
 - [ ] **组织要点**：源文件进 `src/`、头文件进 `include/`、顶层管整体、子目录管模块，目标之间用 `target_link_libraries` 串联。
 
-> 记法：**顶层只做"项目级声明 + 组装"，具体目标的属性写在定义它的那个 `CMakeLists.txt` 里**（就近原则，避免全局变量满天飞）。
+> 记法：**顶层只做"项目级声明 + 组装"，具体目标的属性写在定义它的那个 `CMakeLists.txt` 里**（就近原则，避免全局变量扩散）。
 
 ---
 
 ## 4. 库与依赖：造库、用库、引第三方
 
-> 覆盖：在本工程里生成静态库/动态库、使用自己生成的库、使用外部库的三种情形、静态与动态的取舍与运行期坑、把自建库导出给别人用、第三方依赖（`find_package` / `FetchContent`）。
+> 覆盖：在本工程里生成静态库/动态库、使用自己生成的库、使用外部库的三种情形、静态与动态的取舍与运行期问题、把自建库导出给别人用、第三方依赖（`find_package` / `FetchContent`）。
 
 ### 4.1 在本工程里生成库
 
@@ -284,7 +284,7 @@ target_compile_options(myapp PRIVATE -Wall -Wextra)
   target_compile_features(mymath PUBLIC c_std_11)     # 编译标准也自动继承
   ```
 
-- [ ] **改输出名与输出目录**：
+- [ ] **修改输出名与输出目录**：
 
   ```cmake
   set_target_properties(mymath PROPERTIES
@@ -316,7 +316,7 @@ target_compile_options(myapp PRIVATE -Wall -Wextra)
     generate_export_header(mymath)     # 生成 mymath_export.h，内含 MYMATH_EXPORT 宏
     ```
 
-  - 或一把自动化（省事，但工程里有全局数据时不稳）：`set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)`
+  - 或全局自动化（简便，但工程含全局数据时不稳定）：`set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)`
   - Windows 动态库会**同时**产出 `.dll`（运行时用）和 `.lib`（链接用的导入库），分发时两个都要给
 
 ### 4.2 在本工程里使用自己生成的库
@@ -339,7 +339,7 @@ target_compile_options(myapp PRIVATE -Wall -Wextra)
 
 ### 4.3 使用"外部"库的三种情形
 
-- [ ] **情形 1：库提供了 CMake 支持（最省事）** → 详见 4.6
+- [ ] **情形 1：库提供了 CMake 支持（推荐）** → 详见 4.6
 
   ```cmake
   find_package(ZLIB REQUIRED)
@@ -380,7 +380,7 @@ target_compile_options(myapp PRIVATE -Wall -Wextra)
 
   - 为什么不好：路径写死不可移植；**不会传递头文件目录**；手写 `.a` 列表时**顺序敏感**（被依赖的库要放后面，GNU ld 是单遍扫描）
 
-### 4.4 静态库 vs 动态库：怎么选、会踩什么
+### 4.4 静态库与动态库：选型与易错点
 
 | 维度 | 静态库 | 动态库 |
 |---|---|---|
@@ -388,14 +388,14 @@ target_compile_options(myapp PRIVATE -Wall -Wextra)
 | 部署 | 简单（单文件、无运行时依赖） | 要把 `.so`/`.dll` 一起分发或安装 |
 | 体积 | 每个可执行文件各含一份 | 多个程序共用一份 |
 | 升级 | 必须重新编译链接 | 替换库文件即可（ABI 兼容时） |
-| 典型坑 | 多份副本、许可证、链接顺序 | **运行时找不到库** |
+| 常见问题 | 多份副本、许可证、链接顺序 | **运行时找不到库** |
 
-- [ ] **坑 1：Linux 运行时报 `error while loading shared libraries: libmymath.so: cannot open shared object file`**
+- [ ] **易错点 1：Linux 运行时报 `error while loading shared libraries: libmymath.so: cannot open shared object file`**
   - 临时应急：`export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH`
   - 正规做法：配 RPATH——`set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")`（安装后生效），或用系统库目录
-- [ ] **坑 2：Windows 运行时找不到 `.dll`**：把 `.dll` 放到 exe 同目录，或把目录加进 `PATH`
-- [ ] **坑 3：Windows 链接期 `LNK2019 unresolved external symbol`**：符号没导出（见 4.1 的导出宏），或没链接导入库 `.lib`
-- [ ] **坑 4：静态库出现 `undefined reference`**：`target_link_libraries` 的顺序/依赖没写对；用**目标名**链接可让 CMake 自动排布
+- [ ] **易错点 2：Windows 运行时找不到 `.dll`**：把 `.dll` 放到 exe 同目录，或把目录加进 `PATH`
+- [ ] **易错点 3：Windows 链接期 `LNK2019 unresolved external symbol`**：符号没导出（见 4.1 的导出宏），或没链接导入库 `.lib`
+- [ ] **易错点 4：静态库出现 `undefined reference`**：`target_link_libraries` 的顺序/依赖没写对；用**目标名**链接可让 CMake 自动排布
 
 > 记法：**自己造的库，用 `PUBLIC`/`INTERFACE` 把"头文件路径 + 编译要求 + 依赖"包进目标**；外部库优先用它自带的 CMake 配置（`X::X`），没有就自己包一个 `IMPORTED` 目标——**永远不要在业务 target 上散写 `-I`/`-L`/绝对库路径**。
 
@@ -559,7 +559,7 @@ target_link_libraries(app PRIVATE mymath::mymath)
   Remove-Item -Recurse -Force build; cmake -S . -B build; cmake --build build
   ```
 
-  很多"灵异问题"清空 `build/` 后消失。
+  清空 `build/` 可消除多数此类异常。
 
 > 记法：**配置错 = 脚本 / 依赖问题，构建错 = 代码 / 链接问题**。分不清就先删掉 `build/` 重来。
 

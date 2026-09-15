@@ -1,8 +1,8 @@
 # Makefile 学习指南（C/C++ 手工构建）
 
-> 用途：从"抄别人 Makefile"到"自己能写、能改、能排错"的路线图 + 要点笔记。面向**熟悉 C/C++ 与 gcc 命令行，但没系统写过 Makefile**的读者。
+> 用途：从"照抄他人 Makefile"到"自己能写、能改、能排错"的路线图 + 要点笔记。面向**熟悉 C/C++ 与 gcc 命令行，但没系统写过 Makefile**的读者。
 > 使用方式：每学完一个小点，把 `[ ]` 改成 `[x]`；需要展开某节可随时让我补充。
-> 定位：讲清 **"make 凭什么决定要重新编译什么、Makefile 怎么写才不出错"**，重点是**增量构建**与**依赖关系**这两件事。
+> 定位：讲清 **make 依据什么判定需要重新编译，以及 Makefile 的正确写法**，重点是**增量构建**与**依赖关系**。
 > 背景贴合：你已在学 C 语言高级内容（`c-advanced-learning.md`）与 CMake（`cmake-learning-guide.md`）——本文补上"手写构建脚本"这一层，理解 CMake 生成的 Makefile 到底长什么样。
 > 前提：以 **GNU make 4.x** 与 gcc/clang 为例；Windows 上用 MinGW/MSYS2 的 `make`（原生 `nmake` 语法不同，见 6.3）。
 
@@ -39,7 +39,7 @@ make -j8        # 并行构建（8 路）
 make clean      # 清理
 ```
 
-> ⚠️ 命令行的缩进**必须是 TAB**，不能是空格——这是 Makefile 第一大坑（报 `missing separator`）。
+> ⚠️ 命令行的缩进**必须是 TAB**，不能是空格——这是 Makefile 最常见的错误（报 `missing separator`）。
 
 **② 五个核心概念**（Makefile 的心智模型）
 
@@ -49,7 +49,7 @@ make clean      # 清理
 | **TAB 缩进** | 每条命令行以一个 TAB 开头（不是空格），这是语法而非风格 |
 | **自动变量** | `$@` 目标、`$<` 第一个依赖、`$^` 全部依赖、`$?` 更新的依赖——写通用规则全靠它们 |
 | **时间戳驱动** | 依赖比目标新 → 重跑命令；否则跳过。make 的"智能"只有这一条规则 |
-| **变量与展开时机** | `:=` 立即展开、`=` 用到才展开（新手先用 `:=` 少踩坑） |
+| **变量与展开时机** | `:=` 立即展开、`=` 用到才展开（新手优先使用 `:=`） |
 
 **③ 最常用的 5 条命令 + 3 个变量**
 
@@ -149,7 +149,7 @@ make clean      # 清理
   make clean      # 删除 app 与两个 .o
   ```
 
-  - 第二次 `make` 只编了 `main.o`，这就是**增量构建**的直接证据
+  - 第二次 `make` 只编译了 `main.o`，这就是**增量构建**的直接证据
   - Windows/MinGW 下产物是 `app.exe`，规则里的目标名最好也带上 `.exe`，否则每次都会重新链接（见 6.3）
 
 > 记法：**"目标 : 依赖" 下一行用 TAB 写命令**；变量区放最上面，规则区依次写「链接规则 → 模式规则 → 清理」。90% 的小工程用这个骨架就够了。
@@ -223,7 +223,7 @@ make clean      # 清理
 - [ ] **命令行覆盖 & 环境变量**：`make CFLAGS="-O3 -g"` 可临时改（命令行 > Makefile 内 `=`；`override` 可强制）；环境变量默认会被 Makefile 里的赋值覆盖。
 - [ ] **查看所有内置规则与变量**：`make -p`（输出很长，配合 `grep` 用，如 `make -p | grep -A2 '^%.o'`）。
 
-> 记法：**新手先用 `:=`，需要"用户可覆盖的默认值"用 `?=`，累加选项用 `+=`**；`-I` 放 `CPPFLAGS`、`-O2/-g/-Wall` 放 `CFLAGS`、`-L` 放 `LDFLAGS`、`-lxxx` 放 `LDLIBS`——这是社区的通用约定，别人接手才不会懵。
+> 记法：**新手先用 `:=`，需要"用户可覆盖的默认值"用 `?=`，累加选项用 `+=`**；`-I` 放 `CPPFLAGS`、`-O2/-g/-Wall` 放 `CFLAGS`、`-L` 放 `LDFLAGS`、`-lxxx` 放 `LDLIBS`——这是社区的通用约定，便于他人接手。
 
 ### 2.3 自动变量与模式规则
 
@@ -365,24 +365,24 @@ make clean      # 清理
   - 用 `pkg-config` 省掉手写路径：`CFLAGS += $(shell pkg-config --cflags glib-2.0)`、`LDLIBS += $(shell pkg-config --libs glib-2.0)`
   - **静态库链接顺序敏感**：被依赖的库放后面（GNU ld 单遍扫描）
 
-> 记法：**源码在 `src/`、头文件在 `include/`、产物在 `build/`**；用 `wildcard + patsubst` 自动收集，用 `vpath` 找源码，用 `include` 拆模块——**别用递归 make，除非你确实需要**。
+> 记法：**源码在 `src/`、头文件在 `include/`、产物在 `build/`**；用 `wildcard + patsubst` 自动收集，用 `vpath` 找源码，用 `include` 拆模块；**除非确有必要，否则不使用递归 make**。
 
 ---
 
 ## 4. 依赖关系与增量构建（重点）
 
-> 覆盖：make 的判断逻辑、头文件依赖这个"经典坑"及其自动解法（`-MMD -MP`）、order-only 依赖、并行构建的安全前提。
+> 覆盖：make 的判断逻辑、头文件依赖这一经典问题及其自动解法（`-MMD -MP`）、order-only 依赖、并行构建的安全前提。
 
-### 4.1 为什么改了头文件没重编？（经典坑）
+### 4.1 修改头文件后未重新编译（经典问题）
 
-- [ ] **现象**：改了 `util.h`，`make` 说 "Nothing to be done" 或只编了没改的文件 → 因为 Makefile 里**没有声明"`.o` 依赖 `.h`"**，make 只看到 `.o` 依赖 `.c`。
+- [ ] **现象**：修改 `util.h` 后，`make` 报 "Nothing to be done"，或只编译了未修改的文件 → 因为 Makefile 里**没有声明"`.o` 依赖 `.h`"**，make 只看到 `.o` 依赖 `.c`。
 - [ ] **手工解法**（小工程可行，但要人工维护，容易漏）：
 
   ```make
   main.o: main.c util.h
   util.o: util.c util.h
   ```
-- [ ] **自动解法（推荐）**：让编译器顺手吐出依赖文件，再让 make 读进来：
+- [ ] **自动解法（推荐）**：让编译器同时生成依赖文件，再由 make 读入：
 
   ```make
   CFLAGS += -MMD -MP          # -MMD 生成 .d；-MP 为每个头文件加空目标，防止头文件被删后报错
@@ -462,7 +462,7 @@ make clean      # 清理
 | `No rule to make target 'xxx.h'` | 头文件被依赖但不存在（常见于 `.d` 残留） | `-MP` 选项可缓解；或 `make clean` 后重来 |
 | `undefined reference to 'foo'` | 链接时符号缺失 | 对象文件没进 `OBJS`；或库没写进 `LDLIBS`；静态库顺序问题 |
 | `recipe for target 'xxx' failed` | 上面的命令本身失败（信息在前面） | 往上翻第一条真正的编译/链接错误 |
-| `make: 'xxx' is up to date.` | 目标比依赖新（可能真的没变） | 需要强制重建用 `make -B`；改了头文件没生效看 4.1 |
+| `make: 'xxx' is up to date.` | 目标比依赖新（确实无变更时属正常） | 需要强制重建用 `make -B`；改了头文件没生效看 4.1 |
 | `Nothing to be done for 'all'.` | `all` 没有依赖（只写了 `.PHONY`） | 给 `all` 加上真正的目标依赖 |
 | `warning: overriding recipe for target` | 同一目标被定义两次 | 删掉重复规则，或改用不同目标名 |
 | `*** missing separator` 出现在变量行 | 变量赋值行前有 TAB | 变量行顶格写，不要缩进 |
@@ -472,7 +472,7 @@ make clean      # 清理
 
 - [ ] **第一步：确认"该不该重编"**——`make -n` 看它打算做什么；`make --debug=b` 看它为什么认为某个目标过期。分不清是"依赖写漏"还是"命令写错"。
 - [ ] **第二步：看第一条错误**——make 会打印它执行的命令，编译错误的真正原因在**最上面那条**（`-k` 可一次看全）。
-- [ ] **第三步：清干净重来**——`.d` 文件、半成品 `.o` 最容易造成"灵异现象"：
+- [ ] **第三步：清干净重来**——`.d` 文件、半成品 `.o` 最容易导致异常现象：
 
   ```bash
   make clean && make
@@ -484,13 +484,13 @@ make clean      # 清理
 
 > 记法：**`missing separator` = 缩进问题；`No rule` = 依赖/规则缺失；`undefined reference` = 链接缺东西**。这三类覆盖了新手 80% 的报错。
 
-### 6.3 Windows 上的差异（避坑）
+### 6.3 Windows 平台差异
 
-- [ ] 用 **MinGW / MSYS2** 的 `make`（`mingw32-make` 或 `make`）；路径分隔符用 `/` 更省事，或注意 `\` 会被当转义。
+- [ ] 用 **MinGW / MSYS2** 的 `make`（`mingw32-make` 或 `make`）；路径分隔符建议用 `/`；注意 `\` 会被当作转义。
 - [ ] **TAB 问题在 Windows 编辑器里更常见**（VS Code 右下角可切 Tab/空格；`.editorconfig` 里对 `Makefile` 设 `indent_style = tab`）。
-- [ ] **原生 `nmake`（MSVC 自带）语法不同**：本文的 `:=`、`$(wildcard)`、`%.o: %.c` 大多不支持，别混用。
+- [ ] **原生 `nmake`（MSVC 自带）语法不同**：本文的 `:=`、`$(wildcard)`、`%.o: %.c` 大多不支持，不要混用。
 - [ ] shell 差异：make 默认用 `sh`；Windows 上建议在 MSYS2/Git Bash 环境里跑，或显式 `SHELL := /bin/sh`。
-- [ ] **产物名会多个 `.exe`**（实测坑，很容易被误判成"增量构建失效"）：MinGW 的 gcc 收到 `-o app` 实际产出 `app.exe`，而规则里的目标名是 `app` → make 找不到该文件，**每次 make 都会重新链接**。解法：目标名带上后缀，或用变量区分平台：
+- [ ] **产物名会多个 `.exe`**（实测发现的易错点，容易被误判为"增量构建失效"）：MinGW 的 gcc 收到 `-o app` 实际产出 `app.exe`，而规则里的目标名是 `app` → make 找不到该文件，**每次 make 都会重新链接**。解法：目标名带上后缀，或用变量区分平台：
 
   ```make
   ifeq ($(OS),Windows_NT)
@@ -500,7 +500,7 @@ make clean      # 清理
   endif
   TARGET := app$(EXE)          # Windows → app.exe；Linux/macOS → app
   ```
-- [ ] **`rm` / `mkdir -p` 依赖 Unix shell**（实测坑）：若 make 用 `cmd.exe` 当 shell，`$(RM)`（默认 `rm -f`）会报"不是内部或外部命令"，而 `mkdir -p build` 会**多建一个名为 `-p` 的目录**。解法二选一：① 在 MSYS2 / Git Bash 里跑 make（推荐）；② 把这些命令写成平台安全的变量（Windows 下 `RM = del /q`、`MKDIR = mkdir`）。
+- [ ] **`rm` / `mkdir -p` 依赖 Unix shell**（实测发现的易错点）：若 make 使用 `cmd.exe` 作为 shell，`$(RM)`（默认 `rm -f`）会报"不是内部或外部命令"，而 `mkdir -p build` 会**多建一个名为 `-p` 的目录**。解法二选一：① 在 MSYS2 / Git Bash 里跑 make（推荐）；② 把这些命令写成平台安全的变量（Windows 下 `RM = del /q`、`MKDIR = mkdir`）。
 
 ---
 
@@ -575,7 +575,7 @@ make clean      # 清理
 | 3 | 3 | 工程组织 | 会搭 `src`/`include`/`build` 布局，会 `include` 拆模块 | ☐ |
 | 4 | 4 | 依赖与增量 | 会用 `-MMD -MP`、order-only 依赖，`-j` 不出偶发失败 | ☐ |
 | 5 | 5 | 命令与调试 | 会用 `-n` / `-B` / `-k` / `--debug=b` / `$(info)` | ☐ |
-| 6 | 6 | 排错 | 能一眼分三类报错（缩进 / 缺规则 / 链接），会清干净重来 | ☐ |
+| 6 | 6 | 排错 | 能区分三类报错（缩进 / 缺规则 / 链接），会清理后重建 | ☐ |
 
 > 时间紧的读法：**核心速览 → 第 1 节 → 第 4 节 → 第 6 节 → 附录 A**。第 4 节是"手写 Makefile 到底专不专业"的分水岭。
 
