@@ -176,6 +176,20 @@ utarray_free(a);
   ```
 - [ ] **判断规则**：只读操作（`HASH_FIND*`、`HASH_COUNT`）按值传 `T *` 安全；任何写操作（`HASH_ADD*`、`HASH_DEL`、`HASH_REPLACE*`、`HASH_SORT`、`HASH_CLEAR`）都必须传 `T **`。
 - [ ] 官方指南"Passing the hash pointer into functions"一节的原话：*"…the hash macros modify it (in other words, they modify the pointer itself not just what it points to)."*
+- [ ] **head 何时改变、改成什么**（逐项打印地址实测）：
+
+  | 操作 | head 是否改变 | 变成 |
+  |---|---|---|
+  | 空表首次插入 | 是 | 刚插入的元素（`head == &新元素`） |
+  | 非空表插入 | 否 | 不变（新元素追加到 `tbl->tail`） |
+  | 删除 head 指向的元素 | 是 | 应用序（默认 = 插入序）的下一个元素 |
+  | 删除中间 / 尾部元素 | 否 | 不变 |
+  | 删空（最后一个元素） | 是 | `NULL` |
+  | `HASH_SORT` | 是 | 排序后的第一个元素 |
+  | `HASH_REPLACE` 替换 head 元素 | 是 | 先跳到下一个元素（**不是**新元素；新元素追加到尾部） |
+  | `HASH_CLEAR` | 是 | `NULL` |
+
+  - head 指向的**不是表本身**，而是"承载 `tbl` 指针的那个元素"（表是独立 `malloc` 的块，不在元素体内）；由于每个元素的 `hh.tbl` 都指向同一张表（实测三者相等），表锚可以在元素之间转移——这正是删除、排序会改变 head 的原因，也意味着**删掉 head 元素不会销毁表**（表随最后一个元素被删或 `HASH_CLEAR` 才释放）。
 
 > 记法：增删查记三件套 `HASH_ADD_INT` / `HASH_FIND_INT` / `HASH_DEL`；**读传 `T*`、写传 `T**`**；改句柄名就换泛型宏。
 
