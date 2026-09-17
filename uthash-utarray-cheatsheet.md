@@ -129,7 +129,24 @@ utarray_free(a);
 - [ ] **`HASH_ADD*` 不去重**：同键添加两次 → `HASH_COUNT` 为 2，`HASH_FIND` 返回**后加入**的那个。需要唯一性时先查后插，或用 `HASH_REPLACE*`。
 - [ ] **泛型宏的 `keylen` 必须与查找时一致**：`keylen=5` 插入、`keylen=4` 查找会被视为不同键（实测）。
 
-> 记法：增删查记三件套 `HASH_ADD_INT` / `HASH_FIND_INT` / `HASH_DEL`；改句柄名就换泛型宏。
+### 2.3 把表头传给函数（易错）
+
+- [ ] **根因：宏会给 head 本身赋值。** 首次插入展开为 `(head) = (add);`（`uthash.h:407`）；删除首元素或最后一个元素时 `HASH_DEL` 会重指或置空 head，`HASH_SORT` 也可能更换首元素。因此 head 必须处于**可赋值的左值位置**。
+- [ ] **非左值直接编译失败**（反证）：`HASH_ADD_INT((T *)0, id, s)` → `error: lvalue required as left operand of assignment`。
+- [ ] **四种写法的实测结论**：
+
+  | 写法 | 能否编译 | 调用者 head 是否更新 | 结论 |
+  |---|---|---|---|
+  | 全局 / 文件静态 `static T *users`，函数内直接写 `HASH_ADD_INT(users, ...)` | 是 | 是 | 变量名即左值，可直接用 |
+  | 局部 head + `void add(T **phead, ...)` 内写 `HASH_ADD_INT(*phead, ...)` | 是 | 是 | **标准写法** |
+  | 局部 head + 按值 `void add(T *head, ...)` | **是** | **否** | 空表时静默失效（元素泄漏且查不到） |
+  | head 作为结构体成员，写 `HASH_ADD_INT(db->users, ...)` | 是 | 是 | 合法 |
+
+- [ ] **按值传 `T *` 是最坑的写法**：表为空时 `(head) = (add)` 只改形参副本，调用者仍是 `NULL`（实测 `users == NULL`、`HASH_COUNT = 0`）；表非空时走 `else` 分支、不碰 head，于是又能用。表现为"有时有效"，**不可依赖**。
+- [ ] **判断规则**：只读操作（`HASH_FIND*`、`HASH_COUNT`）按值传 `T *` 安全；任何写操作（`HASH_ADD*`、`HASH_DEL`、`HASH_REPLACE*`、`HASH_SORT`、`HASH_CLEAR`）都必须传 `T **`。
+- [ ] 官方指南"Passing the hash pointer into functions"一节的原话：*"…the hash macros modify it (in other words, they modify the pointer itself not just what it points to)."*
+
+> 记法：增删查记三件套 `HASH_ADD_INT` / `HASH_FIND_INT` / `HASH_DEL`；**读传 `T*`、写传 `T**`**；改句柄名就换泛型宏。
 
 ---
 
