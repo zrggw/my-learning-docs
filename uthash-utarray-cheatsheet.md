@@ -145,6 +145,35 @@ utarray_free(a);
   | head 作为结构体成员，写 `HASH_ADD_INT(db->users, ...)` | 是 | 是 | 合法 |
 
 - [ ] **按值传 `T *` 是最坑的写法**：表为空时 `(head) = (add)` 只改形参副本，调用者仍是 `NULL`（实测 `users == NULL`、`HASH_COUNT = 0`）；表非空时走 `else` 分支、不碰 head，于是又能用。表现为"有时有效"，**不可依赖**。
+
+  ```text
+  head == NULL  →  (head) = (add);                  ← 写 head 变量本身，必须是左值
+  head != NULL  →  (head)->hh.tbl->tail->next = ...  ← 只写 head 指向的对象
+                   (head)->hh.tbl->num_items++;        副本也够用 → 看起来正常
+  ```
+
+- [ ] **两种传参的内存视图**：
+
+  ```text
+  A. 传左值（全局 users / *phead / db->users）—— 写入落到调用者的变量
+     调用者                          被调函数
+     ┌───────────────┐  &users       HASH_ADD_INT(*phead, id, s)
+     │ T *users=NULL │ ─────────┐    └─ 展开为 (*phead) = (s);
+     └───────┬───────┘          └──────────────┘
+             ▲                          │
+             └──────── 写入 ────────────┘
+     结果：users → [elem1] → [elem2]    HASH_COUNT = n  ✓
+
+  B. 按值传 T*（形参是地址副本）—— 写入只落在副本上
+     调用者                          被调函数 add(T *users)
+     ┌───────────────┐  复制地址值   ┌──────────────────┐
+     │ T *users=NULL │ ────────────▶ │ 形参 users = NULL│
+     └───────────────┘               └────────┬─────────┘
+             ▲                                │ (users) = (s)
+             │ 永远不写回                      ▼
+     结果：调用者 users 仍为 NULL      [elem1]（只被形参指着）
+           ⇒ 函数返回后无人引用：泄漏 + 查不到  ✗
+  ```
 - [ ] **判断规则**：只读操作（`HASH_FIND*`、`HASH_COUNT`）按值传 `T *` 安全；任何写操作（`HASH_ADD*`、`HASH_DEL`、`HASH_REPLACE*`、`HASH_SORT`、`HASH_CLEAR`）都必须传 `T **`。
 - [ ] 官方指南"Passing the hash pointer into functions"一节的原话：*"…the hash macros modify it (in other words, they modify the pointer itself not just what it points to)."*
 
