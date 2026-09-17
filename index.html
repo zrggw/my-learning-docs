@@ -78,17 +78,32 @@
   .markdown-body pre code.hljs { padding: 0; background: transparent !important; }
 
   .status { color: var(--muted); font-size: 13px; padding: 4px 2px; }
-  .copy-btn { float: right; margin-left: 8px; font-size: 11px; color: var(--muted);
+  /* 代码块外层容器：让"复制"按钮固定在该块右上角，不被横向滚动带走 */
+  .code-wrap { position: relative; }
+  .code-wrap > pre { margin-top: 0; }
+  .copy-btn { position: absolute; top: 8px; right: 10px; z-index: 2; font-size: 11px; color: var(--muted);
               border: 1px solid var(--border); background: var(--bg); border-radius: 5px; padding: 2px 7px; cursor: pointer; }
   .copy-btn:hover { color: var(--accent); }
+  /* 图片：限宽，避免大图撑破内容区 */
+  .markdown-body img { max-width: 100%; height: auto; }
   #toTop { position: fixed; right: 22px; bottom: 22px; z-index: 30; border: 0; border-radius: 50%;
            width: 42px; height: 42px; font-size: 18px; cursor: pointer; color: #fff; background: var(--accent);
            box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .2s; }
   #toTop.show { opacity: 1; pointer-events: auto; }
   footer { padding: 14px 24px; color: var(--muted); font-size: 12px; }
 
-  @media (max-width: 1200px) { .outline { display: none; } }
-  @media (max-width: 860px) { .toc { width: 220px; flex-basis: 220px; } .main { padding: 20px; } }
+  @media (max-width: 1200px) { .outline { display: none; } #outlineToggle { display: none; } }
+  @media (max-width: 860px) {
+    /* 窄屏改为单列：目录在上（限高可滚动），正文在下；三栏并排会把正文挤到不可读 */
+    .layout { display: block; }
+    .toc { position: static; width: auto; flex: none; max-height: 42vh; border-right: 0;
+           border-bottom: 1px solid var(--border); }
+    .main { padding: 14px 12px; }
+    .doc { padding: 16px 14px; border-radius: 10px; }
+    .doc-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .controls { top: auto; bottom: 74px; right: 12px; }
+    .markdown-body { font-size: 15px; }
+  }
 </style>
 </head>
 <body>
@@ -121,6 +136,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/highlight.min.js" defer></script>
+<!-- 补充语言包：cmake 与 powershell 不在 common 包内，缺了会告警且不高亮 -->
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/languages/cmake.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/languages/powershell.min.js" defer></script>
 <script>
 /* ---- 配置：聚合哪些文档 ---- */
 const DOCS = [
@@ -195,7 +213,12 @@ function renderRaw(text, container) { const pre = document.createElement('pre');
 
 function addCopyButtons(container) {
   container.querySelectorAll('pre').forEach(pre => {
-    if (pre.querySelector('.copy-btn')) return;
+    if (pre.parentElement && pre.parentElement.classList.contains('code-wrap')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'code-wrap';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+
     const btn = document.createElement('button');
     btn.className = 'copy-btn';
     btn.textContent = '复制';
@@ -205,7 +228,34 @@ function addCopyButtons(container) {
         .then(() => { btn.textContent = '已复制'; setTimeout(() => btn.textContent = '复制', 1200); })
         .catch(() => { btn.textContent = '复制失败'; });
     });
-    pre.appendChild(btn);
+    wrap.appendChild(btn);
+  });
+}
+
+/* 代码块语言归一化：别名映射 + 未注册语言回退到 plaintext（否则 hljs 会告警且不高亮） */
+const LANG_ALIAS = {
+  text: 'plaintext', txt: 'plaintext', plain: 'plaintext',
+  make: 'makefile', mk: 'makefile',
+  sh: 'bash', shell: 'bash', console: 'bash', zsh: 'bash',
+  ps1: 'powershell', pwsh: 'powershell',
+  yml: 'yaml', 'c++': 'cpp', 'c#': 'csharp'
+};
+function normalizeCodeLangs(root) {
+  const hasHljs = (typeof hljs !== 'undefined' && typeof hljs.getLanguage === 'function');
+  root.querySelectorAll('pre code').forEach(el => {
+    const m = /(?:^|\s)language-([\w+#.-]+)/i.exec(el.className || '');
+    let lang = m ? m[1].toLowerCase() : '';
+    lang = LANG_ALIAS[lang] || lang;
+    if (lang && hasHljs && !hljs.getLanguage(lang)) lang = 'plaintext';
+    if (lang) { el.className = 'language-' + lang; } else { el.className = 'language-plaintext'; }
+  });
+}
+
+/* 图片：懒加载 + 异步解码，避免打开含大量插图的文档时集中下载 */
+function prepareImages(root) {
+  root.querySelectorAll('img').forEach(img => {
+    img.loading = 'lazy';
+    img.decoding = 'async';
   });
 }
 
@@ -218,6 +268,8 @@ function renderDocInto(idx, md, host) {
 
   if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
     body.innerHTML = marked.parse(md);
+    normalizeCodeLangs(body);
+    prepareImages(body);
     const hs = [];
     body.querySelectorAll('h1,h2,h3').forEach((h, k) => {
       const id = slug(h.textContent, idx + 'd' + k);
