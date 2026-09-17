@@ -175,6 +175,7 @@ utarray_free(a);
            ⇒ 函数返回后无人引用：泄漏 + 查不到  ✗
   ```
 - [ ] **判断规则**：只读操作（`HASH_FIND*`、`HASH_COUNT`）按值传 `T *` 安全；任何写操作（`HASH_ADD*`、`HASH_DEL`、`HASH_REPLACE*`、`HASH_SORT`、`HASH_CLEAR`）都必须传 `T **`。
+- [ ] **按值传的副本并非"完全无效"**：副本与调用者的指针**指向同一个对象**，因此通过副本**改对象**（`head->hh.tbl->num_items++`、改元素字段、把新元素挂进表）**真实生效**；只有**给指针变量本身赋值**（`head = …`）才只落在副本上。判断法始终是同一句：**这个操作会不会给 head 变量赋值？** 会 → 需要左值（`T **` / 全局 / 成员）；不会 → 按值 `T *` 足够。
 - [ ] 官方指南"Passing the hash pointer into functions"一节的原话：*"…the hash macros modify it (in other words, they modify the pointer itself not just what it points to)."*
 - [ ] **head 何时改变、改成什么**（逐项打印地址实测）：
 
