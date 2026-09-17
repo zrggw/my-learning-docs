@@ -13,6 +13,7 @@
 - [Hello-Agents 第 1–4 章精读：25 分钟白板分享稿](hello-agents-ch1-4-sharing.md)
 - [Makefile 学习指南（C/C++ 手工构建）](makefile-learning-guide.md)
 - [MCP（Model Context Protocol）学习指南](mcp-learning-guide.md)
+- [uthash / utarray 速查手册（C 哈希表与动态数组）](uthash-utarray-cheatsheet.md)
 
 ## 在线阅读
 
