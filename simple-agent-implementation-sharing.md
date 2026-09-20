@@ -154,7 +154,7 @@ Action: get_weather(city="北京")
 - 协议三段：模型输出 `Thought`（推理快照）与 `Action`（具体动作），Action 在实现上是**函数调用形式**；环境返回的结果由宿主代码包装成 `Observation` 回填。三者构成完整对话历史，也就是下一轮的输入。
 - 这个结构化文本称为**交互协议（Interaction Protocol）**：模型输出不再是单一自然语言回复，而是「推理过程 + 最终决策」两段，使代码可以稳定解析。
 - 采用文本协议而不是 JSON 或原生函数调用接口，理由有三点：**模型无关**——凡兼容 OpenAI 接口规范的服务（OpenAI、Azure、Ollama、vLLM）都能直接运行；**可解析**——正则即可稳定提取函数名与参数；**可留痕**——整条 `Thought-Action-Observation` 串就是可打印的日志。
-- 格式约束必须由系统提示词显式声明：一次只输出一对 Thought-Action、Action 必须写在同一行、信息足够后必须用 `Finish[最终答案]` 结束。
+- 格式约束必须由系统提示词显式声明：一次只输出一对 Thought-Action、Action 必须写在同一行、信息足够后必须用 `Finish[最终答案]` 结束。完整模板（原文 `AGENT_SYSTEM_PROMPT`）见板 5 的参考材料。
 
 **🔗 过渡句**："协议定了，下面就把它落到代码上——这是本次分享的重点。"
 
@@ -171,6 +171,39 @@ tools = {"get_weather": get_weather}
 out = llm.generate(拼接历史)
 a = re.search(r"Action: (.*)").group(1)
 ```
+
+**📌 参考材料**：第一章原文的指令模板（`AGENT_SYSTEM_PROMPT`，逐字引自原文 1.3 节）
+
+```python
+AGENT_SYSTEM_PROMPT = """
+你是一个智能旅行助手。你的任务是分析用户的请求，并使用可用工具一步步地解决问题。
+
+# 可用工具:
+- `get_weather(city: str)`: 查询指定城市的实时天气。
+- `get_attraction(city: str, weather: str)`: 根据城市和天气搜索推荐的旅游景点。
+
+# 输出格式要求:
+你的每次回复必须严格遵循以下格式，包含一对Thought和Action：
+
+Thought: [你的思考过程和下一步计划]
+Action: [你要执行的具体行动]
+
+Action的格式必须是以下之一：
+1. 调用工具：function_name(arg_name="arg_value")
+2. 结束任务：Finish[最终答案]
+
+# 重要提示:
+- 每次只输出一对Thought-Action
+- Action必须在同一行，不要换行
+- 当收集到足够信息可以回答用户问题时，必须使用 Action: Finish[最终答案] 格式结束
+
+请开始吧！
+"""
+```
+
+- **用途**：作为 `system_prompt` 传给 LLM。模板中的格式条款与板 5 的解析代码一一对应——Thought/Action 成对、Action 单行、`function_name(arg_name="arg_value")` 的引号形式、`Finish[...]` 收尾。
+- **现场处理**：不写板书、不逐字朗读；讲到板 4 的格式约束或板 5 的解析规则需要取证时，把这一段投屏。
+- **易错点**：模板改了格式条款，解析正则必须同步修改；两者脱节会出现「模型按新格式输出、代码按旧格式解析」的静默失败。
 
 **🎤 口播要点**
 
