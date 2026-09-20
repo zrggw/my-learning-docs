@@ -73,7 +73,12 @@
   └──── 观察（Observation）←────┘
 ```
 
-**🖼 参考图**：`images/agent-loop.png`（原文图 1.5「智能体与环境交互的基本循环」）——开场即投屏。
+**🖼 参考图**（开场即投屏）
+
+![图 1.5 智能体与环境交互的基本循环](images/agent-loop.png)
+
+- 图源：原文图 1.5「智能体与环境交互的基本循环」；文件 `images/agent-loop.png`。
+- 用法：投屏后对照左栏骨架，指出 `Perception` 与 `Action` 两个接口的位置。
 
 **🎤 口播要点**
 
@@ -118,6 +123,8 @@ for i in range(N):        ← 上限
   拼历史 → 调模型 → 解析行动
   Finish[...] → break     ← 出口
 ```
+
+**🖼 参考图**：沿用板 1 已投屏的图 1.5，指认 `Thought` 框内并列的 `Planning` 与 `Tool Selection` 两个子框。
 
 **🎤 口播要点**
 
