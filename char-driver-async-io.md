@@ -4,7 +4,7 @@
 > 使用方式：每学完一个小点，把 `[ ]` 改成 `[x]`；需要展开某节可随时让我补充。
 > 定位：讲清 **"用户态的一次异步提交，究竟在内核里经过了谁、由谁在什么时候报告结果"**，重点是**`read_iter`/`write_iter` 契约**与**`kiocb` 生命周期**。
 > 背景贴合：你已有 C 语言与内核模块基础（`c-advanced-learning.md`）；本文补上 VFS 与驱动之间的异步接口这一层。
-> 前提：源码引文锚定 **Linux 7.2.6（stable）/ 7.3-rc4（mainline）**；模块编译需与运行内核匹配的头文件；用户态示例需 `libaio` / `liburing`。与老资料差异较大的几处已逐一标注版本（见 1.5）。**本文为 Windows 环境撰写，内核模块代码未在本机实测**，依据是一手源码（见附录 C）。
+> 前提：源码引文锚定 **Linux 7.2.6（stable）/ 7.3-rc4（mainline）**；模块编译需与运行内核匹配的头文件；用户态示例需 `libaio` / `liburing`。与老资料差异较大的几处已逐一标注版本（见 1.6）。**本文为 Windows 环境撰写，内核模块代码未在本机实测**，依据是一手源码（见附录 C）。
 
 ---
 
@@ -89,7 +89,7 @@ kill_fasync(&dev->async_queue, SIGIO, POLL_IN);    /* 投递 SIGIO；POLL_IN 即
 | 数据搬运者 | 驱动内联拷贝 | 用户态稍后自己 `read` | 驱动内联拷贝或 DMA |
 | 完成报告者 | — | 不报告，只报告"可读/可写" | 驱动调 `ki_complete` |
 | 用户态阻塞点 | `read()` 内部 | `poll()`/信号处理 | 无（结果在 ring 里） |
-| 真实字符设备 | 常见 | **最主流**（input/tty/FUSE/RDMA/ALSA） | 少见（块设备/文件系统为主，见 1.6） |
+| 真实字符设备 | 常见 | **最主流**（input/tty/FUSE/RDMA/ALSA） | 少见（块设备/文件系统为主，见 1.5） |
 
 **④ 最常用的 5 条命令 / 3 个检查点**
 
@@ -191,7 +191,7 @@ kill_fasync(&dev->async_queue, SIGIO, POLL_IN);    /* 投递 SIGIO；POLL_IN 即
   - 判据是 `is_sync_kiocb(kiocb)`，即 `kiocb->ki_complete == NULL`（`init_sync_kiocb()` 不设置它）。
   - 因此一个 `read_iter` 实现必须**同时**能应付异步与同步两种调用者（见 4.2）。
 
-### 1.6 一个反直觉的事实：纯字符设备很少用 `-EIOCBQUEUED`
+### 1.5 一个反直觉的事实：纯字符设备很少用 `-EIOCBQUEUED`
 
 - [ ] **【纠偏】真实内核里，纯字符设备几乎不用 `-EIOCBQUEUED`**。对约 30 个高概率文件的排查结论：返回 `-EIOCBQUEUED` 的路径集中在**块设备**（`block/fops.c`）、**文件系统 Direct-IO**（`fs/iomap/direct-io.c`、`fs/fuse/file.c`）与 **`io_uring_cmd`**（`drivers/nvme/host/ioctl.c`）。字符设备的主流通行方案是 **`poll` + `fasync`**。
   - 这不矛盾：接口对所有文件类型开放，`-EIOCBQUEUED` 是对字符设备**合法且受支持**的契约；只是"用 DMA 异步搬运数据"的字符设备（如数据采集卡）才会真正用到它。
@@ -199,7 +199,7 @@ kill_fasync(&dev->async_queue, SIGIO, POLL_IN);    /* 投递 SIGIO；POLL_IN 即
 
 > 记法：**接口是通用的，用法是有偏好的：字符设备先想 `poll`+`fasync`，真要异步搬运数据时才动 `read_iter`+`ki_complete`。**
 
-### 1.5 与老资料差异速查（写代码前先看这张表）
+### 1.6 与老资料差异速查（写代码前先看这张表）
 
 > 记法：**"返回 `-EIOCBQUEUED` = 我把完成权拿走了；返回别的 = 事情已经办完。"**
 
@@ -974,8 +974,8 @@ kill_fasync(&dev->async_queue, SIGIO, POLL_IN);    /* 投递 SIGIO；POLL_IN 即
 
 正文 6 节已覆盖"就绪 / 通知 / 完成三条路 + 工程细节 + 排错"的主干；以下为**尚未展开**的部分：
 
-1. **`->uring_cmd`（`IORING_OP_URING_CMD`）通道**：正文 1.3 只标注了它的存在与 `io_uring_cmd_done()` 这一回调名，未给出完整实现示例。
+1. **`->uring_cmd`（`IORING_OP_URING_CMD`）通道**：正文 1.5 只标注了它的存在与 `io_uring_cmd_done()` 这一回调名，未给出完整实现示例。
 2. **零拷贝与页固定的完整写法**：5.2 给了原则（提交时拷贝 / `iov_iter_extract_pages()`）与取舍，未给可编译的 pin/unpin 示例。
-3. **`iopoll`（`IORING_SETUP_IOPOLL`）**：正文 1.3 与 6.2 只提到"`loop_rw_iter()` 对 `IOCB_HIPRI` 返 `-EOPNOTSUPP`"，未展开驱动侧 `->iopoll` 的实现。
+3. **`iopoll`（`IORING_SETUP_IOPOLL`）**：正文第 6 节只提到"`loop_rw_iter()` 对 `IOCB_HIPRI` 返 `-EOPNOTSUPP`"，未展开驱动侧 `->iopoll` 的实现。
 4. **本文示例的编译与实测**：所有内核模块代码为依据一手源码编写的骨架，**未在本机编译或加载**（作者环境为 Windows，无 Linux 内核树）；用户态示例需 `libaio`/`liburing`，同样未实测。
-5. *字符设备 `-EIOCBQUEUED` 实例的穷尽检索*：1.3 的"少见"结论来自约 30 个高概率文件的排查，未做全树 `grep` 证明（可在有内核源码的机器上跑 `rg -l EIOCBQUEUED | rg -v '^(fs|block|mm|io_uring)/'` 复核）。
+5. *字符设备 `-EIOCBQUEUED` 实例的穷尽检索*：1.5 的"少见"结论来自约 30 个高概率文件的排查，未做全树 `grep` 证明（可在有内核源码的机器上跑 `rg -l EIOCBQUEUED | rg -v '^(fs|block|mm|io_uring)/'` 复核）。
