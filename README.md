@@ -11,6 +11,7 @@
 - [CMake 学习指南（C/C++ 构建系统）](cmake-learning-guide.md)
 - [C++ → Go 算法题快速转换指南](cpp-to-go-cheatsheet.md)
 - [Go 语言学习框架（C++ 背景版）](go-learning-framework.md)
+- [Linux 内核 / 驱动模块 / 硬件交互关系](kernel-driver-hardware-interaction.md)
 - [简单 Agent 实现：15 分钟白板分享稿](simple-agent-implementation-sharing.md)
 - [Makefile 学习指南（C/C++ 手工构建）](makefile-learning-guide.md)
 - [MCP（Model Context Protocol）学习指南](mcp-learning-guide.md)
