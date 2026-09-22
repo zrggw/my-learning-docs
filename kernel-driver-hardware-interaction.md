@@ -26,7 +26,32 @@
  硬件    寄存器 / FIFO / DMA 引擎                设备读写内存
 ```
 
-**② 六个核心概念**
+**③ 六个核心概念**
+**② 四层结构与故障边界**
+
+```text
+ ④ 用户态        应用进程
+      ▲           │  read / ioctl / mmap / epoll
+      │           ▼
+ ════╪═══════════╪════════════════════════════════════════
+      │           │  边界①  用户态出错 → 进程收信号
+      │           ▼
+ ① 内核核心      ├─ 设备模型 / 总线      决定谁绑定谁
+      ▲           ├─ 中断子系统          把硬件事件交给谁
+      │           └─ 内存 / DMA 子系统    把地址翻译给设备
+      │           │  （上行：注册回调）    （下行：调用回调）
+ ════╪═══════════╪════════════════════════════════════════
+      │           │  边界②  内核态出错 → oops / 整机挂死
+      │           ▼
+ ② 驱动模块      翻译官：读写寄存器、管缓冲、上报事件
+      ▲           │  （中断线拉高）  （下行：寄存器写）
+      │           ▼
+ ③ 硬件          寄存器 / FIFO / DMA 引擎
+
+  边界① 之上：权限、地址校验、返回值检查——写错只影响一个进程
+  边界② 之上：一行错误的寄存器写就能挂死整机——驱动代码要按"能挂死内核"对待
+```
+
 
 | 概念 | 一句话 |
 |---|---|
@@ -37,7 +62,7 @@
 | **三段地址** | 虚拟地址 ≠ 物理地址 ≠ 总线地址；设备只认总线地址，必须经 DMA API 转换 |
 | **devm_ 管资源生命周期** | 资源挂在 `struct device` 上，probe 失败与设备移除走同一条回收路径 |
 
-**③ 最常用的 5 条命令 / 3 个观察点**
+**④ 最常用的 5 条命令 / 3 个观察点**
 
 | 命令 | 作用 |
 |---|---|
@@ -53,7 +78,7 @@
 | `ls /sys/bus/<bus>/drivers/` 下有无对应目录 | 无目录说明驱动没注册成功（多半 init 返回了负值） |
 | `ls /dev/` 有无设备节点 | 无节点说明驱动没调用 `device_create()`/`cdev_device_add()` |
 
-**④ 三大高频现象（完整对照表见第 6 节）**
+**⑤ 三大高频现象（完整对照表见第 6 节）**
 
 | 现象 | 第一反应 |
 |---|---|
@@ -97,7 +122,31 @@
 - [ ] **上行（硬件 → 用户态）**：中断 → ISR → 下半部 → 唤醒进程。
 
   ```text
-  硬件置起中断线
+   ① 硬件：状态变化 → 在中断线上置起电平/边沿
+        │
+   ② 中断控制器：记录、按优先级选一个、发给某个 CPU
+        │
+   ③ CPU：保存现场 → 进入架构异常入口（irq_enter()）
+        │
+   ④ 内核：找到控制器对应的 Linux IRQ 号
+        │    generic_handle_irq(irq) / generic_handle_domain_irq(domain, hwirq)
+        ▼
+   ⑤ irq_desc[irq].handle_irq(desc)          ← flow handler
+        │    先做芯片级动作：ack / mask（时序随控制器而异）
+        ▼
+   ⑥ handle_irq_event(desc)                  ← 锁外调用，避免 handler 里拿锁
+        │
+   ⑦ for_each_action_of_desc: action->handler(irq, action->dev_id)
+        │    共享中断：链表上每个驱动的 handler 都会被调用
+        │
+        ├── 返回 IRQ_HANDLED ──────────→ 完成
+        └── 返回 IRQ_WAKE_THREAD ──────→ __irq_wake_thread()
+                                              │
+                                              ▼
+                                     唤醒内核线程 irq/<irq>-<name>
+                                     执行 thread_fn（可睡眠）
+        │
+   ⑧ 中断退出（__irq_exit_rcu）：处理 softirq / 唤醒 ksoftirqd
     → 中断控制器 → CPU 异常入口 → generic_handle_irq()
       → irq_desc 的 flow handler → 遍历 action 链表
         → 你的 handler(irq, dev_id)
@@ -106,6 +155,26 @@
   ```
 
 - [ ] **两条方向共用"绑定关系"**：下行靠 `file->f_op`（打开设备时确定），上行靠 `irq_desc->action`（`request_irq()` 时建立）。**两者都在 `probe()` 里就位**——这就是为什么 probe 是理解一切的起点。
+
+  ```text
+  下行绑定    设备 → 驱动代码
+              cdev_add() / device_create() → /dev/<name>
+              open() 时 chrdev_open() 把 file->f_op 换成你的 fops
+  ────────────────────────────────────────────────────────────
+  上行绑定    中断线 → 驱动代码
+              request_irq(irq, my_handler, ..., dev_id)
+                作用：在 irq_desc[irq].action 链表上挂一个 irqaction
+                内容：handler = my_handler, dev_id = 设备指针, flags
+  ────────────────────────────────────────────────────────────
+  共享绑定    两边靠同一份私有数据串起来
+              platform_set_drvdata(pdev, info)   ← probe 里存
+              filp->private_data = ...           ← open 里取（下行）
+              dev_get_drvdata(dev_id)            ← ISR 里取（上行）
+  ────────────────────────────────────────────────────────────
+  下行（用户 read）:  应用 → file->f_op → 你的 fops → 硬件寄存器
+  上行（硬件中断）:  硬件 → irq_desc->action → 你的 handler → wake_up
+  ```
+
 
 ### 1.3 一个完整实例的调用次序
 
@@ -202,6 +271,43 @@
   - **驱动应当为自己的活动对象持有模块引用**：打开设备/在飞 I/O 期间 `try_module_get(THIS_MODULE)`，结束时 `module_put()`。这样 `rmmod` 在设备被占用时会失败而不是把代码卸掉。
 
 - [ ] **`__init` 函数可能失效**：内建模块的 `.init.text` 在启动后期被 `free_initmem()` 释放，模块的 init 段由 `do_init_module()` 里的任务释放。所以**不要保存 `__init` 函数的地址、不要期望它被调用第二次**。
+
+- [ ] **模块状态机**：`rmmod` 的三种失败原因都能在这张图上找到位置。
+
+  ```text
+   insmod / modprobe
+        │
+        ▼
+   ┌──────────┐  load_module()：校验 ELF、版本、签名、符号
+   │ 加载中    │  · 版本不符      → 失败（Invalid module format）
+   │ LOADING  │  · 校验/签名失败 → 失败（Key was rejected）
+   └────┬─────┘
+        │ do_init_module() → 调用你的 module_init()
+        ▼
+   ┌──────────┐  init 返回 0   → 转入 LIVE
+   │ 初始化中  │  init 返回负值 → 失败并回收
+   │ COMING   │  init 返回正值 → 仅警告，仍算成功
+   └────┬─────┘
+        │
+        ▼
+   ┌──────────┐  ◀── 正常状态：probe 完成，/dev 与 /sys 就绪
+   │ 运行中    │      rmmod 前会检查引用计数：
+   │  LIVE    │      · 有模块依赖我   → -EWOULDBLOCK
+   └────┬─────┘      · 状态非 LIVE    → -EBUSY
+        │            · 有 init 无 exit → -EBUSY
+        │ rmmod：引用计数必须归零
+        ▼
+   ┌──────────┐  调用你的 module_exit() → 注销驱动
+   │ 卸载中    │  随后 async_synchronize_full() → free_module()
+   │ GOING   │
+   └────┬─────┘
+        │
+        ▼
+   ┌──────────┐
+   │ 已卸载    │  代码段与数据段释放，/sys/module/<name> 消失
+   └──────────┘
+  ```
+
 
 ### 2.1 设备模型三元组
 
@@ -381,6 +487,25 @@
   | 4 | id_table | 平台自定义 ID |
   | 5 | 名字 | `pdev->name` == `drv->name`（老式写法） |
 
+  ```text
+  一次 platform_match() 的判定路径（自上而下，命中即返回）
+
+    device 侧（硬件描述）        driver 侧（驱动声明）            结果
+    ───────────────────────     ────────────────────────────    ────────
+    ① DT 节点 compatible   ◄──►  of_match_table[].compatible    命中 → 1
+    ② ACPI _HID / _CID     ◄──►  acpi_match_table[].id          命中 → 1
+    ③ platform_device      ◄──►  id_table[]                     命中 → 1
+         .name
+    ④ platform_device      ◄──►  driver.name                    命中 → 1
+         .name
+    ───────────────────────     ────────────────────────────    ────────
+    都没命中 → 返回 0（不匹配）；判定过程出错 → 返回负值
+
+    driver_override 被用户态写过时，先于以上所有规则生效
+    注：x86 常见路径是 ②，ARM / RISC-V 常见路径是 ①
+  ```
+
+
 - [ ] **设备树怎么描述硬件、驱动怎么取数据**：
 
   ```dts
@@ -436,6 +561,30 @@
   - 需要看"谁先谁后"时用 `driver_async_probe=` 启动参数或逐驱动的 `probe_type` 控制。
   - 若某驱动的 probe 依赖另一设备已就绪，**唯一可靠做法是让它返回 `-EPROBE_DEFER`**，而不是指望顺序。
 
+- [ ] **该不该返回 `-EPROBE_DEFER`：三种情况的判断**：
+
+  ```text
+   probe() 里拿不到某个资源
+        │
+        ├─ 这个资源可能"稍后才出现"？
+        │     （时钟、GPIO 控制器、电源域、由另一驱动注册的子系统设备）
+        │     └── 是 ──→ return -EPROBE_DEFER;
+        │                内核把你挂到 pending 链表，等任一驱动 probe 成功后重试
+        │                注意：必须在 probe 早期返回，别先建了子设备再 defer
+        │
+        ├─ 这个资源在这台机器上"根本不存在"？
+        │     └── 是 ──→ return -ENODEV;
+        │                内核不再重试
+        │
+        └─ 拿到了但初始化硬件失败？
+              └── 是 ──→ return <具体负 errno>;（-EIO / -ETIMEDOUT ...）
+                         内核不再重试，用户态看到明确原因
+
+   观测：/sys/kernel/debug/devices_deferred 列出所有卡在 pending 的设备
+   兜底：driver_deferred_probe_check_state() 会在超时后改判 -ETIMEDOUT
+  ```
+
+
 ### 2.5 devm_：资源生命周期交给设备
 
 - [ ] **核心语义**（`Documentation/driver-api/driver-model/devres.rst`，v7.2 原文）：
@@ -465,6 +614,31 @@
   - 结论：`remove()` 里**能看到** devm 资源仍然有效（可以放心关时钟、清寄存器）；但**不要再手动释放**那些用 `devm_*` 申请的东西。
   - 官方也提醒 devm 只管释放、不管检查：`Managed resources pertains to the freeing of these resources *only* - all other checks needed are still on you.`
 
+- [ ] **devres 链表与释放顺序**（"后申请的先释放"为什么重要）：
+
+  ```text
+   probe() 执行顺序                    devres 链表（挂在 dev->devres_head）
+   ─────────────────                   ──────────────────────────────────
+   devm_kzalloc()      ─────────────►  [内存]
+   devm_rtc_allocate_device() ──────►  [内存] → [rtc_device]
+   devm_request_irq(irq_1hz) ───────►  [内存] → [rtc_device] → [irq_1hz]
+   devm_platform_ioremap_resource() ►  追加 [iomap] 到表头
+                                        ▲
+                        新条目插在表头 ─┘
+
+   释放时（device_unbind_cleanup → devres_release_all → release_nodes）
+   用 list_for_each_entry_safe_reverse 从表尾开始：
+        [iomap] 先释放 → [irq_1hz] → [rtc_device] → [内存]
+        即"申请的逆序"，与手写 remove() 的惯例一致
+
+   危险写法：devm_request_irq() 之后又手工 free_irq()
+     → 释放时 devres 再释放一次 → 双重释放
+   危险写法：probe 失败分支里手工 kfree(devm_kzalloc 的内存)
+     → 同上，devres 会再 free 一遍
+   正确：devm 申请的，就交给 devres 释放，一行都别多写
+  ```
+
+
 > 记法：**"设备注册找驱动、驱动注册找设备，两边都由 `bus->match()` 裁决；probe 里用 devm 申请，remove 里别重复释放。"**
 
 ---
@@ -486,6 +660,23 @@
   ```
 
 - [ ] **三层各自的数据结构与职责**：
+
+  ```text
+  ① 高层驱动 API（你的代码唯一直接接触的一层）
+       request_irq() / request_threaded_irq() / free_irq()
+       │
+       ▼  注册到
+  ② flow handler（内核，负责 ack / mask / eoi 与事件分发）
+       handle_level_irq() / handle_edge_irq() / handle_fasteoi_irq()
+       │
+       ▼  调用
+  ③ chip 封装（中断控制器驱动，直接操作控制器寄存器）
+       struct irq_chip: irq_mask / irq_ack / irq_unmask / irq_eoi
+
+  你的 handler 由 ② 遍历 desc->action 链表时调用（见 3.2）
+  ② 之所以存在：不同控制器的时序不同，内核把它抽象成可替换的 flow handler
+  ```
+
 
   | 层 | 结构 / 函数 | 职责 | 谁提供 |
   |---|---|---|---|
@@ -602,6 +793,28 @@
   | `IRQ_HANDLED` | 我处理了 |
   | `IRQ_WAKE_THREAD` | 请唤醒我的 `thread_fn` 继续处理 |
 
+- [ ] **线程化 IRQ 的分裂点在哪**：
+
+  ```text
+   request_threaded_irq(irq, handler, thread_fn, flags, name, dev_id)
+                            │        │
+   ┌────────────────────────┘        └──────────────────────────┐
+   ▼                                                            ▼
+   顶半部 handler：硬中断上下文                  thread_fn：内核线程上下文
+   · 关抢占、关本 CPU 中断                       · 进程上下文，可以睡眠
+   · 读状态寄存器、判"是不是我"                   · 可以拿 mutex、GFP_KERNEL 分配
+   · 清中断、把数据搬进自己的缓冲                  · 可以 msleep、可与用户态交互
+   · 不能睡眠 / 不能 msleep / 不能拿 mutex        · 仍应尽快返回（占用内核线程）
+   · 不能 GFP_KERNEL 分配                       · 同一 IRQ 的 thread_fn 天然串行
+   返回：HANDLED / NONE / WAKE_THREAD             返回：HANDLED / NONE
+                    │
+      返回 IRQ_WAKE_THREAD 时 ──→ 内核唤醒 irq/<irq>-<name> 线程跑 thread_fn
+      handler == NULL 时 ──────→ 内核装默认顶半部（仅 return IRQ_WAKE_THREAD）
+                                 此时必须带 IRQF_ONESHOT，否则 -EINVAL
+  ```
+
+  - 判断标准：**这段代码会不会睡眠？** 会 → 放 `thread_fn`；不会且很短 → 放顶半部。
+
 - [ ] **`request_irq()` 在 v7.2 多带了一个标志**（`include/linux/interrupt.h` 逐字）：
 
   ```c
@@ -647,6 +860,29 @@
 ### 3.4 下半部选型：线程化 IRQ、workqueue、tasklet
 
 - [ ] **四者的现状与选型**（v7.2）：
+
+- [ ] **选型流程图**（从"中断里干不完"出发）：
+
+  ```text
+   硬中断里发现"活干不完"（要睡眠 / 要分配 / 要拿锁 / 耗时）
+        │
+        ├─ 这段工作属于这个中断本身？
+        │     （读 FIFO、处理协议、应答设备）
+        │        └── 是 ──→ 线程化 IRQ：thread_fn
+        │                     · 优点：同一 IRQ 的 thread_fn 天然串行
+        │                     · 需要掩码到处理完 → IRQF_ONESHOT
+        │
+        └─ 只是"稍后要做"的通用后台任务？
+              （超时检查、缓存回写、设备复位）
+                 └── 是 ──→ workqueue：schedule_work() / queue_work()
+                              · queue_work 的返回值提供内存序保证
+                              · 需要自己的执行上下文 → alloc_workqueue()
+                              · 想随设备自动销毁   → devm_alloc_workqueue()
+
+   不要选：tasklet（已 deprecated）
+   注意：BH workqueue 跑在 softirq 上下文，同样不能睡眠
+  ```
+
 
   | 机制 | 上下文 | 能否睡眠 | 状态与建议 |
   |---|---|---|---|
@@ -719,6 +955,41 @@
   - 这三条路径的细节、常见错误（`poll_wait` 顺序、`EPOLLERR` 归属、fasync 队列拆除）见 `char-driver-async-io.md` 第 2、3 节。
 
 - [ ] **"先改状态、再唤醒"的顺序不能反**：反了就会出现"唤醒后检查状态发现没数据，于是又睡下去"，用户态表现为莫名其妙的卡住。
+
+- [ ] **唤醒与返回：以 `poll` 为例的时序**（谁在哪个上下文跑，一眼看清）。
+
+  ```text
+   用户进程               驱动            内核中断路径            硬件
+      │                    │                    │                 │
+      │ open("/dev/x")     │                    │                 │
+      ├───────────────────►│ open(): 绑定 fops  │                 │
+      │                    │                    │                 │
+      │ epoll_ctl(ADD)     │                    │                 │
+      ├───────────────────►│ ->poll() 第一次调用 │                 │
+      │                    │  poll_wait() 登记   │                 │
+      │                    │  返回 0（无数据）    │                 │
+      │                    │                    │                 │
+      │ epoll_wait()       │                    │                 │
+      ├───────────────────────────────────────►│ 进程睡眠         │
+      │ （睡眠中）          │                    │                 │
+      │                    │                    │   数据到达        │
+      │                    │                    │◄────────────────┤
+      │                    │    调用 ISR         │                 │
+      │                    ├◄───────────────────┤                 │
+      │                    │ 读状态 / 清中断      │                 │
+      │                    │ 改状态：data_ready  │                 │
+      │                    │ wake_up_interruptible()               │
+      │                    ├───────────────────►│ 唤醒等待队列      │
+      │◄───────────────────────────────────────┤                 │
+      │ epoll_wait() 返回 1（可读）              │                 │
+      │                    │                    │                 │
+      │ read()             │                    │                 │
+      ├───────────────────►│ ->read_iter()       │                 │
+      │                    │ copy_to_user()      │                 │
+      │◄───────────────────┤ 返回字节数           │                 │
+  ```
+
+  - 两次"进入驱动"分别走不同上下文：`->poll` 在**进程上下文**，ISR 在**硬中断上下文**——两者之间只能靠 `wake_up` 与共享状态沟通。
 
 > 记法：**顶半部只做"认领 + 清中断 + 上报"，要睡眠就返回 `IRQ_WAKE_THREAD`；唤醒只改状态加 `wake_up`，数据仍由 `read()` 取。**
 
@@ -822,6 +1093,36 @@
 ### 4.3 三段地址空间
 
 - [ ] **虚拟地址、物理地址、总线地址是三套东西**（`Documentation/core-api/dma-api-howto.rst`，v7.2 原文）：
+- [ ] **三段地址空间的转换链**（这是 DMA API 存在的根本原因）：
+
+  ```text
+  驱动代码看到的是            MMU 翻译后              设备实际使用
+  ──────────────────────    ──────────────────      ──────────────────
+  【虚拟地址】               【物理地址】             【总线地址】
+  void *                    phys_addr_t             dma_addr_t
+
+  kmalloc() 返回值           virt_to_phys()          dma_map_*() 返回
+  ioremap() 返回值           resource->start         dma_alloc_coherent()
+  vmalloc() 返回值                                    返回
+  ──────────────────────    ──────────────────      ──────────────────
+        │                          │                        ▲
+        │ CPU 用它执行代码          │ MMU 用页表翻译           │ IOMMU / 主桥
+        └─────────────────────────►┘                        │ 做第二层翻译
+                                                           │
+  设备侧只能发出总线地址 ─────────────────────────────────────┘
+
+  踩坑点：
+
+    ✗ 把 kmalloc 得到的虚拟地址直接写进设备寄存器
+      → 设备会把"虚拟地址"当物理地址用，读写位置完全错误
+    ✗ 把 vmalloc() 的内存拿去做 DMA
+      → 官方明文禁止（虚拟连续 ≠ 物理连续）
+    ✗ 把内核镜像 / 模块镜像 / 栈地址拿去做 DMA
+      → 同样官方禁止
+    ✗ 把用户态指针直接交给设备
+      → 页可能被换出；应先 pin 住，再按页 dma_map_page() / dma_map_sg()
+  ```
+
 
   ```text
   The kernel normally uses virtual addresses.  Any address returned by
@@ -861,6 +1162,27 @@
 
   - coherent 的定义（`Documentation/core-api/dma-api.rst` 原文）："memory for which a write by either the device or the processor can immediately be read by the processor or device without having to worry about caching effects."
   - **coherent 也不免除屏障**（同文档 important 块原文）：写描述符时要在"设备可见的字段"之间插 `wmb()`，例如先写地址、`wmb()`、再写 `DESC_VALID`。
+
+- [ ] **所有权移交：流式映射的三阶段**
+
+  ```text
+   阶段① 申请        阶段② 映射              阶段③ 传输后 sync
+   ─────────────    ──────────────────      ─────────────────────
+   kmalloc()        dma_map_single(...,     dma_sync_single_for_cpu()
+   或 dma_alloc_      DMA_FROM_DEVICE)         （读方向：取回设备写的数据）
+     coherent()     └─ 返回 dma_addr_t        dma_sync_single_for_device()
+         │               │                       （写方向：交给设备前刷新）
+         │               │                            │
+         ▼               ▼                            ▼
+   CPU 拥有          所有权移交设备            所有权回到 CPU
+   （随便读写）       CPU 不要再碰这块内存       （继续随便读写）
+                     ← 这段窗口内 CPU 访问
+                        可能拿到旧数据/脏数据
+   ──────────────────────────────────────────────────────────────
+   常见错误：映射之后 CPU 又去写这块缓冲，然后直接启动 DMA
+           → 写入还在缓存里没刷下去，设备读到旧内容
+           → 写方向必须在启动 DMA 之前 sync_for_device
+  ```
 
 - [ ] **streaming 的方向与所有权规则**（同文档逐字）：
 
@@ -919,6 +1241,25 @@
 | **configfs** | `Documentation/filesystems/configfs.rst`：`configfs is a filesystem-based manager of kernel objects` | 用户态驱动对象生命周期（`mkdir` 建对象） |
 
 - [ ] **sysfs 的硬约束**（sysfs.rst 原文）：`Mixing types, expressing multiple lines of data, and doing fancy formatting of data is heavily frowned upon.` —— 一文件一值。
+
+- [ ] **它们各自对应"哪条通路"**（选错接口是最常见的架构错误）：
+
+  ```text
+  控制通路（低频、结构化、能阻塞）        数据通路（高频、流式）
+  ────────────────────────────────      ──────────────────────────
+  ioctl      设备专属命令                字符设备 read/write
+  sysfs      单值状态与旋钮              字符设备 mmap（零拷贝）
+  configfs   对象生命周期
+  debugfs    调试寄存器
+
+  写错代价：命令语义混乱 / 状态失配       写错代价：吞吐与延迟
+
+  典型：配置采样率、启停设备             典型：传感器数据流、采集卡
+  ────────────────────────────────      ──────────────────────────
+  反例：把 4KB 采样数据用 sysfs 传 → 违反"一文件一值"，且承载不了速率
+  反例：把"启停设备"放到与设备生命周期脱节的接口 → 状态难以维护
+  ```
+
 - [ ] **属性必须在设备注册前建好**（`Documentation/driver-api/driver-model/device.rst` 逐字警告）：设备注册时会产生 uevent 通知 udev；注册后再加属性，用户态不会被通知。正确做法是用 `dev_groups`，由 `device_add()` 阶段统一创建。
 - [ ] **设备节点从哪里来**：`device_create()`（或 `cdev_device_add()`）→ devtmpfs 自动建 `/dev/<name>`；驱动无需手写 `mknod`。
 
@@ -1058,6 +1399,39 @@
   ```
 
 ### 5.3 用实例串起全链路
+- [ ] **实例的数据结构与资源归属**（谁持有谁，一眼看清生命周期）：
+
+  ```text
+  ① probe 拿到的东西，各自挂在谁身上？
+
+     struct platform_device                 struct rtc_device
+     ┌────────────────────┐                ┌────────────────────┐
+     │ resource[] ────────┼──┐             │ ops = &sa1100_rtc_ │
+     │ id_entry           │  │             │         ops        │
+     └─────────┬──────────┘  │             └─────────▲──────────┘
+               │ devm_*      │                       │
+               ▼             │       devm_rtc_register_device()
+     ┌────────────────────┐  │                       │
+     │ struct sa1100_rtc  │  │                       │
+     │  lock              │  │             ┌─────────┴──────────┐
+     │  rcnr/rtar ────────┼──┘             │ devm_request_irq() │
+     │  rtsr/rttr         │                │  irq     = irq_1hz │
+     │  irq_1hz / alarm   │                │  handler = my_isr  │
+     │  rtc ──────────────┼───────────────►│  dev_id  = &pdev-> │
+     │  clk               │                │              dev   │
+     └────────────────────┘                └────────────────────┘
+               ▲
+               └── ISR 里 dev_get_drvdata(dev_id) 取回 sa1100_rtc
+
+  ② 谁负责释放？（devres 链表，挂在内核的 struct device 上）
+
+     申请顺序  kzalloc → rtc_allocate → request_irq → ioremap
+     释放顺序  ioremap  → request_irq  → rtc_device  → kzalloc
+               （后申请的先前放，与手写 remove() 的惯例一致）
+
+  ③ remove() 里只需处理 devm 管不到的：关掉硬件自身的中断使能
+  ```
+
 
 - [ ] **从加载到用户态读到的完整调用序列**：
 
@@ -1113,6 +1487,45 @@
   | ④ 中断到达 | 计数是否增长 | `cat /proc/interrupts` |
   | ⑤ 用户态 | 节点是否存在、权限是否正确 | `ls -l /dev/<name>`、`ls /sys/class/<cls>/` |
   | ⑥ 数据通路 | DMA 方向、缓冲区生命周期 | `Documentation/core-api/dma-api.rst` 的调试章节 |
+
+- [ ] **排查决策树**（"设备没反应"往哪查）：
+
+  ```text
+   设备没反应
+       │
+       ▼
+   ① lsmod 里有你的模块吗？
+       ├── 没有 ──→ init 失败或根本没 insmod
+       │             查 dmesg：Invalid module format / Unknown symbol
+       └── 有
+            │
+            ▼
+   ② /sys/bus/<bus>/drivers/<drv>/ 下有设备符号链接吗？
+       ├── 没有 ──→ 从未匹配上：probe 根本没被调用
+       │             查 compatible / ACPI _HID / id_table 是否与硬件描述一致
+       │             查 /sys/kernel/debug/devices_deferred 是否卡在 -EPROBE_DEFER
+       └── 有
+            │
+            ▼
+   ③ dmesg 里 probe 报错了吗？
+       ├── -EBUSY ─→ 资源被别的驱动占了（cat /proc/iomem 找占用者）
+       ├── -ENODEV → 依赖资源没拿到（该返回 -EPROBE_DEFER 吗？）
+       └── 无报错
+            │
+            ▼
+   ④ 硬件真的在产生事件吗？→ cat /proc/interrupts
+       ├── 计数不涨 ──→ 问题在硬件/DT/中断控制器，不在驱动
+       │                 查 DT interrupts、线路、设备是否真的被使能
+       └── 计数在涨
+            │
+            ▼
+   ⑤ 用户态拿不到数据？
+       ├── /dev 节点不存在 ──→ 驱动没调用 device_create()/cdev_device_add()
+       ├── 节点在但 read 卡住 ─→ ISR 里漏了 wake_up_*()
+       └── 数据内容不对 ────→ 回头看第 4 节：DMA 方向 / sync 时机 / 缓冲生命周期
+  ```
+
+  - 这棵树的价值在于**先证伪"驱动代码错了"**：第 ①–④ 步都能在不改动一行驱动代码的前提下完成。
 
 - [ ] **高频现象对照表**：
 
