@@ -15,6 +15,7 @@
 - [简单 Agent 实现：15 分钟白板分享稿](simple-agent-implementation-sharing.md)
 - [Makefile 学习指南（C/C++ 手工构建）](makefile-learning-guide.md)
 - [MCP（Model Context Protocol）学习指南](mcp-learning-guide.md)
+- [4 MiB 环形缓冲区字符设备驱动测试报告（WSL2 实测）](ringbuf-driver-test-report.md)
 - [uthash / utarray 速查手册（C 哈希表与动态数组）](uthash-utarray-cheatsheet.md)
 
 ## 在线阅读
