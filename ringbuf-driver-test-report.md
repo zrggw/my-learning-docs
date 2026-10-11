@@ -1,6 +1,6 @@
 # 4 MiB 环形缓冲区字符设备驱动测试报告（WSL2 实测）
 
-> 用途：给"环形缓冲字符设备驱动"这份实验一个可交付的结论——六个用例各测什么、实测数字是多少、数字背后的原因、以及从零复现与排错的完整路径。面向**已写出驱动、需要证明它对且量化它快不快**的读者。
+> 用途：给"环形缓冲字符设备驱动"这份实验一个可交付的结论——十二个用例各测什么、实测数字是多少、数字背后的原因、以及从零复现与排错的完整路径。面向**已写出驱动、需要证明它对且量化它快不快**的读者。
 > 使用方式：每学完一个小点，把 `[ ]` 改成 `[x]`；需要展开某节可随时让我补充。
 > 定位：回答"驱动写完了怎么验证"这一层，从"能编译、能 insmod"到"有实测数据与运行时观测可以写进报告"。
 > 背景贴合：异步读写在内核里怎么走（`read_iter`/`write_iter` 契约、`kiocb` 生命周期、`fasync`/`io_uring`）见 `char-driver-async-io.md`；那篇标注"内核模块代码未在本机实测"，本文是同一个驱动的真机实测结果，两篇互补。
@@ -10,7 +10,7 @@
 
 ## 核心速览（先看这一页，5 分钟覆盖 80% 内容）
 
-**一句话结论**：六个用例全部通过——数据通路（含 4 MiB 回绕）、`poll`/`epoll` 就绪通知、`/proc/ringbuf` 状态与计数、吞吐基准、驱动内真异步都符合设计预期；**异步吞吐与同步同量级**（内存环形缓冲没有真实 I/O 延迟可隐藏）。运行时观测进一步给出三条反直觉但有证据的结论：**异步提交 88.7% 走快路径根本没挂起**、**274,714 次通知只遇上 6 人次等待者**、以及**并发深度买到的是"排队"而不是"并行"**（事件时间线显示挂起请求被对面逐个完成，每个 64 KiB 约 75 µs）。
+**一句话结论**：十二个用例全部通过——数据通路（含 4 MiB 回绕）、`poll`/`epoll` 就绪通知、`/proc/ringbuf` 状态与计数、吞吐基准、驱动内真异步、接口失败路径（`-EFAULT` 不改状态也不丢数据）、阻塞唤醒与信号打断、异步流程顺序（完成顺序 = 提交顺序）、`close()`/`release()` 时机、io_uring 实际路径、多消费者/多生产者（独立 `open`、不丢不重）都符合设计预期；**异步吞吐与同步同量级**（内存环形缓冲没有真实 I/O 延迟可隐藏）。运行时观测进一步给出三条反直觉但有证据的结论：**异步提交 88.7% 走快路径根本没挂起**、**274,714 次通知只遇上 6 人次等待者**、以及**并发深度买到的是"排队"而不是"并行"**（事件时间线显示挂起请求被对面逐个完成，每个 64 KiB 约 75 µs）。
 
 ### ① 关键数字（每组 64 MiB，五次重复的区间）
 
@@ -38,7 +38,7 @@
 ```bash
 sudo insmod ~/ringbuf-driver/ringbuf.ko && sudo chmod 666 /dev/ringbuf
 cd ~/ringbuf-driver && make test
-bash scripts/run-tests.sh 64                     # 采集环境 + 每次重编 + 顺序跑六个用例
+bash scripts/run-tests.sh 64                     # 采集环境 + 每次重编 + 顺序跑十二个用例
 sudo bash scripts/trace-ringbuf.sh               # 采集事件时间线并汇总（需 root 写 tracefs）
 ```
 
@@ -103,7 +103,7 @@ sudo bash scripts/trace-ringbuf.sh               # 采集事件时间线并汇�
 
 ## 2. 测试用例设计
 
-> 覆盖：六个测试程序各自验证什么、覆盖哪些 I/O 模型、哪些没覆盖。
+> 覆盖：十二个测试程序各自验证什么、覆盖哪些 I/O 模型、哪些没覆盖。
 
 - [ ] **`tests/ringbuf_smoke_test.c` 测数据通路与回绕**（单进程，`O_NONBLOCK`）：空缓冲区读必须 `-EAGAIN`；写 `SIZE-1000` 把 `write_pos` 推到接近末端；读走 1000；再写 2000 使其**跨越 4 MiB 边界**；循环读回全部 4 MiB，按 `gen(i) = (i*31+7) & 0xff` 校验整条字节流。
 - [ ] **`tests/ringbuf_poll_test.c` 测 poll/epoll 就绪通知**：空缓冲 `poll(POLLIN)` 必须超时、`poll(POLLOUT)` 立即就绪；写满后 `POLLOUT` 必须超时；`fork` 出子进程**阻塞在 `poll()` 上**，父进程写入后子进程必须被唤醒（并把等待时长回报父进程校验，以排除"靠超时返回"的假通过）；epoll **水平触发**在数据未读走时反复报告，**边沿触发**只投递一次、新数据到来才再报。
@@ -111,7 +111,13 @@ sudo bash scripts/trace-ringbuf.sh               # 采集事件时间线并汇�
 - [ ] **`tests/ringbuf_stats_test.c` 测累计计数对账**：不是"字段存在"，而是**增量等于已知操作量**——写 100000 字节 → `bytes_written +100000`、`write_ops +1`；读 40000 → `bytes_read +40000`、`read_ops +1`；挂起 64 字节的 AIO 读再用 16 字节写入完成它 → `park_read +1`、`completions_read +1`、`partial_completions +1`（申请 64 得 16）、`completion_bytes +16`；空缓冲非阻塞读 → `eagain +1`；`poll()` 一次 → `poll_calls +1`。另有两条跨字段不变量：无等待者时 `woken_tasks` 增量必须为 0；**缓冲区为空时 `bytes_read` 必须等于 `bytes_written`**。
 - [ ] **`tests/ringbuf_aio_test.c` 测驱动内真异步**（单进程，原生 AIO）：缓冲区为空时 `io_submit` 一个 16 字节异步读，必须**立即返回**；带零超时的 `io_getevents` 必须返回 **0 个事件**（证明请求被挂起而非同步完成）；随后同步 `write` 16 字节反向完成它，`io_getevents` 拿到 `res=16`、`data=0x1234`。
 - [ ] **`tests/ringbuf_bench.c` 测吞吐量**，共四组：同步流水线（`fork` 出生产者/消费者，双方阻塞同步）、单进程乒乓（写完一块立刻读回）、异步读、异步写（父进程 AIO 保持 `depth` 个在途请求，子进程做同步对端）。
-- [ ] **覆盖矩阵**（本次实测的能力边界）：
+- [ ] **`tests/ringbuf_api_test.c` 测接口契约与失败路径**（单进程）：`lseek()` 必须 `-ESPIPE`；长度为 0 的读写必须返回 0 且不改变状态（**这条当初逼出了一个真缺陷**：`.read`/`.write` 少了 `count == 0` 的立即返回，阻塞 fd 上会睡在 `read_wait` 上，非阻塞 fd 会返回 `-EAGAIN`）；请求 8 MiB（> 4 MiB 容量）按可读量返回；满缓冲非阻塞写 `-EAGAIN` 且 `used` 不变；`poll` 同时关心读写时只有对应方向就绪；**读入非法地址 / 从非法地址写出 → `-EFAULT`，且 `used` 不变、数据不丢、`fault +1`**。
+- [ ] **`tests/ringbuf_sync_test.c` 测阻塞读写与信号打断**（`fork`，子进程各自 `open()` 阻塞 fd）：阻塞 `read` 被跨进程写入唤醒、阻塞 `write`（缓冲满）被读出唤醒，且子进程必须**睡够父进程的延时**（排除"靠超时返回"的假通过）；**两个读者都在等时一次写入唤醒全部（`woken_tasks +2`），但 32 字节只够一个消费**，另一个等下一次写入；**被信号打断返回 `-EINTR`**（驱动 `-ERESTARTSYS` 的用户态可见结果）、`eagain` 不变、数据未被消耗。
+- [ ] **`tests/ringbuf_aio_flow_test.c` 测异步流程语义**（单进程即可，`io_submit` 不阻塞）：一次提交 8 个挂起读（proc 里 `async_readers = 8`）、分 8 次各写 64 字节 → **完成顺序必须等于提交顺序**（按 `aio_data` 判定）、每个 `res=64`、内容与对应输入逐一相符；部分完成（申请 64 只写 16 → `res=16`、`partial_completions +1`）；**`RWF_NOWAIT` 在空缓冲上立即以 `-EAGAIN` 完成且不挂起**（`nowait_attempt +1`、`park_read` 不变），去掉标志后同一请求就会挂起；**异步写方向**：写满后 4 个 16 KiB 写全部挂起，读出后按提交顺序完成、排空内容等于四个输入缓冲的级联。
+- [ ] **`tests/ringbuf_release_test.c` 测 `close()`/`release()` 与挂起请求**：用 proc 的 `fasync` 当"release 是否执行"的探针（`release()` 第一件事就是摘掉本文件的注册）——**`close()` 之后请求仍挂着、`async_readers` 与 `fasync` 都不变**（证明 release 未执行、AIO 请求跨 `close` 有效）；请求被另一个 fd 完成后 release 才执行，此时链表已空 → **取消循环在 AIO 模型下不可达**。
+- [ ] **`tests/ringbuf_uring_test.c` 测 io_uring 走哪条路径**：有数据时首次 NOWAIT 尝试即成功（`nowait_success +1`）；空缓冲时**既没立刻 `-EAGAIN` 也没挂起**——实测是 io_uring 把请求挂到驱动 `.poll` 上（`poll_calls +2`），数据到达后重试走同步核（`read_ops +1`）→ **io_uring 不使用 `-EIOCBQUEUED` 挂起路径**，驱动的真异步挂起目前只有原生 AIO 在用。
+- [ ] **`tests/ringbuf_multi_test.c` 测多消费者/多生产者**（每个进程各自 `open()`）：定长 64 B 记录（`producer` + `seq` + 由二者确定的载荷），共享位图登记"是否收到过"（用 `__sync_fetch_and_or` 的**旧值**检测重复投递），收尾扫位图检测丢失，每个消费者要求同一生产者的 `seq` **严格递增**（FIFO 重排检测），并断言 `read 返回值 % 64 == 0`（记录被切开即拷贝语义出错）。三种拓扑：1×3（多消费者）、3×1（多生产者，压到 `write_wait` 争抢）、2×2。
+- [ ] **覆盖矩阵（前六个用例）**：
 
 | 维度 | smoke | poll | proc | stats | aio | bench 同步两组 | bench 异步两组 |
 |---|---|---|---|---|---|---|---|
@@ -125,25 +131,57 @@ sudo bash scripts/trace-ringbuf.sh               # 采集事件时间线并汇�
 | **多线程（pthread）** | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
 | `fasync` 收信号、`io_uring` | 否 | 否 | 只验状态 | 否 | 否 | 否 | 否 |
 
-- [ ] **测试顺序不能调换**：`ringbuf_aio_test` 要求缓冲区初始为空，因此固定为 smoke → poll → proc → stats → bench → aio；前四者结束时都会把缓冲区清空。
+- [ ] **后六个用例补上的维度**（前六个没覆盖到的部分）：
+
+| 维度 | api | sync | aio_flow | release | uring | multi |
+|---|---|---|---|---|---|---|
+| `-EFAULT` 不改状态、不丢数据 | **是** | 否 | 否 | 否 | 否 | 否 |
+| `-ESPIPE` / `count == 0` / 超容量请求 | **是** | 否 | 否 | 否 | 否 | 否 |
+| 阻塞唤醒（含"唤醒全部但数据只够一个"） | 否 | **是** | 否 | 否 | 否 | 否 |
+| 信号打断 → `-EINTR`、数据未被消耗 | 否 | **是** | 否 | 否 | 否 | 否 |
+| 多请求完成顺序 / 部分完成 / `RWF_NOWAIT` | 否 | 否 | **是** | 否 | 否 | 否 |
+| 异步写方向与级联内容 | 否 | 否 | **是** | 否 | 否 | 否 |
+| `close()` 与挂起请求 / `release()` 执行时机 | 否 | 否 | 否 | **是** | 否 | 否 |
+| io_uring 实际走哪条路径 | 否 | 否 | 否 | 否 | **是** | 否 |
+| 多消费者/多生产者（独立 `open`、不丢不重） | 否 | 部分（2 读者，仅唤醒语义） | 否 | 否 | 否 | **是** |
+| **多线程（pthread）** | 否 | 否 | 否 | 否 | 否 | 否 |
+
+- [ ] **测试顺序**：`ringbuf_aio_test` 要求缓冲区初始为空，因此它排在能造数据的用例之后；其余用例都会在开头先 `rb_drain()`，所以顺序本身不敏感。实际顺序：smoke → poll → proc → stats → bench → aio → api → sync → aio_flow → release → uring → multi。
 - [ ] **关于"多进程而非多线程"**：`fork` 之后父子**共享同一个 `struct file`**（子进程继承的是已打开的 fd，不是各自 `open`）。好处是父进程挂起的异步请求能被子进程的同步操作完成、`poll` 的唤醒路径也跨了任务边界；副作用是 `release()` 里的清理路径（摘 `fasync`、取消挂起请求）要等父子都关闭 fd 才会执行。
 
 > 记法：断言"真异步"的最小证据组合 = `io_submit` 立即返回 + 零超时查询到 0 个完成事件 + 反方向操作后拿到完成事件；断言"边沿触发"的最小证据 = 不读走数据时第二次 `epoll_wait` 返回 0。
 
 ## 3. 实测结果
 
-> 覆盖：六个用例的原始输出与吞吐表，不解释原因（见 §4）。吞吐数据来自 `test-results/raw-20261011-185132.txt`（当前代码，含计数）；观测类结果（计数画像与事件时间线）见 §7。
+> 覆盖：十二个用例的原始输出与吞吐表，不解释原因（见 §4）。用例退出码与墙钟来自 `test-results/raw-20261011-201642.txt`（一次完整运行，12 个用例）；吞吐表来自 `test-results/raw-20261011-185132.txt`；观测类结果（计数画像与事件时间线）见 §7。
 
-- [ ] **六个用例全部通过**，退出码均为 0：
+- [ ] **十二个用例全部通过**，退出码均为 0：
 
 | 用例 | 结果 | 墙钟 |
 |---|---|---|
-| ① `ringbuf_smoke_test` | PASS | 0.023 s |
-| ② `ringbuf_poll_test` | PASS | 1.419 s（含 200 ms 唤醒等待与多次 200 ms 超时判定） |
-| ③ `ringbuf_proc_test` | PASS | 0.085 s |
-| ④ `ringbuf_stats_test` | PASS | 0.066 s |
-| ⑤ `ringbuf_bench 64` | 退出码 0 | 1.485 s |
-| ⑥ `ringbuf_aio_test` | PASS | 0.048 s |
+| ① `ringbuf_smoke_test` | PASS | 0.010 s |
+| ② `ringbuf_poll_test` | PASS | 1.410 s（含 200 ms 唤醒等待与多次 200 ms 超时判定） |
+| ③ `ringbuf_proc_test` | PASS | 0.090 s |
+| ④ `ringbuf_stats_test` | PASS | 0.070 s |
+| ⑤ `ringbuf_bench 64` | 退出码 0 | 1.600 s |
+| ⑥ `ringbuf_aio_test` | PASS | 0.060 s |
+| ⑦ `ringbuf_api_test` | PASS | 0.010 s |
+| ⑧ `ringbuf_sync_test` | PASS | 1.110 s（两次 200 ms 唤醒延时 + 300 ms 竞抢 + 200 ms 信号等待） |
+| ⑨ `ringbuf_aio_flow_test` | PASS | 0.080 s |
+| ⑩ `ringbuf_release_test` | PASS | 0.090 s |
+| ⑪ `ringbuf_uring_test` | PASS | 0.250 s（含 200 ms 非阻塞探测） |
+| ⑫ `ringbuf_multi_test` | PASS | 0.650 s（三种拓扑，含子进程收敛） |
+
+- [ ] **后六个用例的关键断言与实测**（⑦~⑫，括号里是对应的计数）：
+
+| 用例 | 关键断言 | 实测 |
+|---|---|---|
+| ⑦ `ringbuf_api_test` | `-ESPIPE`、`count=0` 返回 0、超容量按可读量、满缓冲 `-EAGAIN`、`-EFAULT` 不改状态 | 全通过；读入非法地址与写出非法地址各让 `fault +1`，`used` 在每一步都保持不变，且 EFAULT 之后那 100 字节仍可读（数据未丢） |
+| ⑧ `ringbuf_sync_test` | 阻塞唤醒必须睡够延时、`woken_tasks` 增量、信号打断 `-EINTR` | 200 ms / 201 ms 唤醒；`woken_tasks +2` 而 32 字节只够一个读者；打断时 `eagain +0`、`used` 仍为 0 |
+| ⑨ `ringbuf_aio_flow_test` | 完成顺序 = 提交顺序、部分完成、`RWF_NOWAIT` 不挂起、写方向级联 | `park_read +8` → 8 个事件按 `aio_data` 递增、每个 `res=64`；部分完成 `res=16`；NOWAIT 时 `park_read +0`；写方向 `park_write +4` 且排空末尾等于四个输入级联 |
+| ⑩ `ringbuf_release_test` | `close()` 不取消挂起请求、release 执行时机 | close 后 `async_readers` 仍为 1、`fasync` 仍为 1（release 未执行）；请求完成后 0 ms 内 release 执行、`cancel_on_release +0` |
+| ⑪ `ringbuf_uring_test` | 有数据走 NOWAIT 快路径；空缓冲走哪条路径 | `nowait_success +1`；空缓冲 `poll_calls +2`、`read_ops +1`、`park_read +0`（**不使用挂起路径**） |
+| ⑫ `ringbuf_multi_test` | 不丢不重、同生产者内顺序严格递增、消费者分布 | 1×3：分布 640/666/740（≈1.16:1）；3×1：6144 条全收；2×2：1156/2940（≈2.54:1，跨轮次在 1.6~2.5 之间波动，但无饿死） |
 
 - [ ] **用例 ①：数据通路与回绕**
 
@@ -413,7 +451,7 @@ cat /proc/ringbuf               # 状态快照 + 累计计数
 bash scripts/run-tests.sh 64     # 参数 = 每组 MiB 数，默认 64；求稳用 1024
 ```
 
-产物字段：内核完整版本与启动时间、内核源码树列表、模块内嵌 `vermagic`、`this_module` 段尺寸、`module_layout` 的 CRC、运行内核 BTF 的 `sizeof(struct module)` 对比、`/dev/ringbuf` 与 `/proc/ringbuf` 权限、**当前 `/proc/ringbuf` 完整快照**、以及六个用例的原始输出与墙钟耗时。
+产物字段：内核完整版本与启动时间、内核源码树列表、模块内嵌 `vermagic`、`this_module` 段尺寸、`module_layout` 的 CRC、运行内核 BTF 的 `sizeof(struct module)` 对比、`/dev/ringbuf` 与 `/proc/ringbuf` 权限、**当前 `/proc/ringbuf` 完整快照**、以及十二个用例的原始输出与墙钟耗时。
 
 - [ ] **采集事件时间线**（tracefs 只有 root 能写）：脚本会打开 `events/ringbuf/enable`、制造一段流量（aio 用例 + 1 MiB/组的小流量基准）、把原始 trace 落盘，再调用汇总器输出可读结论。
 
@@ -422,7 +460,7 @@ sudo bash scripts/trace-ringbuf.sh               # 只采 ringbuf 事件（推�
 sudo bash scripts/trace-ringbuf.sh --with-sched  # 额外采 sched 事件，用于判断"等锁还是等调度"
 ```
 
-- [ ] **退出条件**：六个用例的退出码均为 0，且 smoke / poll / proc / stats / aio 各自打印 `PASS`；否则按 §5 的顺序查 `dmesg` 与计数。
+- [ ] **退出条件**：十二个用例的退出码均为 0，且除 `ringbuf_bench` 外的十一个各自打印 `PASS`；否则按 §5 的顺序查 `dmesg` 与计数。
 
 ```bash
 sudo dmesg | tail -5
@@ -528,6 +566,12 @@ sudo bash scripts/trace-ringbuf.sh --with-sched  # 额外采调度事件
 | 单跑状态字段校验 | `./tests/ringbuf_proc_test` | §2 |
 | 单跑计数对账 | `./tests/ringbuf_stats_test` | §7.1 |
 | 单跑真异步验证 | `./tests/ringbuf_aio_test` | §2 |
+| 单跑接口契约 / `-EFAULT` | `./tests/ringbuf_api_test` | §2 |
+| 单跑阻塞唤醒与信号打断 | `./tests/ringbuf_sync_test` | §2 |
+| 单跑异步流程（顺序 / 部分完成 / NOWAIT） | `./tests/ringbuf_aio_flow_test` | §2 |
+| 单跑 `close()`/`release()` 关系 | `./tests/ringbuf_release_test` | §2 |
+| 单跑 io_uring 路径 | `./tests/ringbuf_uring_test` | §2 |
+| 单跑多消费者 / 多生产者 | `./tests/ringbuf_multi_test` | §2 |
 | 单跑吞吐基准 | `./tests/ringbuf_bench 64` | §3 |
 | 查装载失败原因 | `sudo dmesg \| tail -3` | §5 |
 | 量 `sizeof(struct module)` | `python3 scripts/kernel_struct_size.py module` | §5.2 |
@@ -539,22 +583,37 @@ sudo bash scripts/trace-ringbuf.sh --with-sched  # 额外采调度事件
 | 阶段 | 对应章节 | 内容 | 目标 | 状态 |
 |---|---|---|---|---|
 | 1 | 1 | 被测对象与测试环境 | 说清驱动接口清单、best-effort 语义与实测环境 | ☐ |
-| 2 | 2 | 测试用例设计 | 知道六个用例各自断言什么、哪些 I/O 模型没覆盖 | ☐ |
+| 2 | 2 | 测试用例设计 | 知道十二个用例各自断言什么、哪些 I/O 模型没覆盖 | ☐ |
 | 3 | 3 | 实测结果 | 拿到可引用进报告的原始输出与吞吐表（含离散度） | ☐ |
 | 4 | 4 | 结果解读 | 能解释四条曲线、深度退化的机制与计数画像 | ☐ |
 | 5 | 5 | 构建、装载与观测的易错点 | 遇 `Invalid module format` 能用 dmesg 定位；计数/tracepoint 踩坑能自查 | ☐ |
-| 6 | 6 | 一键复现 | 一条命令跑完六个用例与一次时间线采集 | ☐ |
+| 6 | 6 | 一键复现 | 一条命令跑完十二个用例与一次时间线采集 | ☐ |
 | 7 | 7 | 运行时观测 | 说清三层观测的分工、对账方法、使用纪律与时间线读法 | ☐ |
 
 > 时间紧的读法：**核心速览 → 第 3 节 → 第 4 节 → 附录 A**。
 
 ## 附录 C 当前缺口
 
-- **时间线的调度归因未做**：本次只采了 ringbuf 事件，因此"排队是被调度还是被锁拖住"还没答案。下一步用 `sudo bash scripts/trace-ringbuf.sh --with-sched` 采一次，就能把 `park→complete` 与 `sched_switch`/`sched_wakeup` 对齐；必要时再加 `mutex_lock`/`contention_*` 事件看锁等待。
-- **深度退化的隔离实验**：时间线已经给出主机制（对面单线程逐个服务，每请求约 75 µs），但"工作集超 cache""部分完成的碎片请求""调度抖动"三个次要因素仍未逐条隔离。建议：固定 1 MiB 块，单独扫深度 1/2/4/8/16/32，用时间线记录每个请求的服务时长（`complete` 与相邻 `serve` 的时间差）与排队时长，把两者分开看。
-- **计数自身的开销未分离**：`this_cpu_inc` 是单指令，理论上开销在纳秒级，但本次无法从 10 ~ 78% 的运行间离散度中把它分离出来。要回答"计数是否真的无影响"，需要一个 `static_branch` 统计开关做 A/B。
-- **通知合并（水位线）与老化**：计数已经说明当前负载下几乎没有唤醒放大可省（274,714 次通知仅遇 6 人次等待者；时间线窗口里只有 0.16% 的通知遇上等待者），因此收益必须用**多消费者 + 小块写**的新拓扑来验证；届时还要处理"被抑制的通知不能无限期丢失"——即尾块老化（`delayed_work`，开启水位线后亚水位线数据的唤醒延迟上限等于它）。是否采用"按可服务批量数唤醒"（`wake_up_interruptible_nr`，需配排他等待者）留待水位线完成后再评估。
-- **未覆盖的驱动能力**（驱动侧已实现，尚无用例）：缓冲区满时的非阻塞写 `-EAGAIN`；阻塞 `read`/`write` 的跨进程唤醒断言；`fasync` **实际收到 `SIGIO` 信号**（当前只验证 proc 里的注册状态与内核队列变化）；`close()` 之后不再收信号；`io_uring` 走同一条 `.read_iter`/`.write_iter` 路径。
-- **未覆盖的并发拓扑**：目前所有并发用例都靠 `fork` 且共享同一个 `struct file`，因此 `release()` 的清理路径（摘 `fasync`、取消该文件挂起的请求）未被有效触发——计数给出了证据：`cancel_on_release`、`fault`、`park_alloc_fail`、`nowait_attempt` 全为 0。也没有多线程（pthread）用例。
-- **procfs 只做只读**：没有写侧控制（这是刻意设计，见 §1）；如果后续要暴露"重置统计""强制唤醒"之类的操作，应先考虑 `ioctl` 而不是给 procfs 加写接口。
-- **异步机制原理**：`kiocb` 生命周期、`-EIOCBQUEUED` 契约、`fasync` 与 `io_uring` 的关系，见 `char-driver-async-io.md`（该篇为源码级整理，驱动的实测数据以本文为准）。
+- **`SIGIO` 实际收信未测（唯一剩下的用户态覆盖点）**：现在只验证 proc 里的注册状态与内核队列变化，没有断言"真的收到信号"。设计要点：`F_SETOWN` + `O_ASYNC` + `sigaction`，写入后用 `sigtimedwait` 断言收到 `SIGIO` 且 `si_fd` 正确；`close()` 之后必须收不到；顺带实测"普通 `SIGIO` 不携带读/写方向信息"。**注意**：不忽略 `SIGIO` 会让测试进程被默认动作杀掉（写 release 用例时当场踩到）。
+- **挂起请求缺少取消钩子（真实风险，未修）**：驱动 park 时只保存 `kiocb` 裸指针，没有调用 `kiocb_set_cancel_fn()`。若请求仍挂起时 AIO 上下文被销毁（`io_destroy` 或**进程直接退出**），内核 `free_ioctx_users()` 会调用 `req->ki_cancel()`——对普通读写请求该指针**默认为 NULL**（`fs/aio.c` 里只有 `IOCB_CMD_POLL` 有默认取消函数），于是自旋锁 + 关中断上下文里发生空指针调用 → 内核 oops；即使不崩，链表里也留着已释放的 `kiocb`，之后任何一次完成都会拿悬空指针做函数指针调用。验证方式（**必须修复后**才能跑）：子进程 park 一个请求后直接退出，父进程观察新增的 teardown 计数增长且内核不崩。修法约束与设计要点见驱动仓库 README 的待补清单。
+- **公平性没有机制、只有观察**：驱动是"唤醒全部 + 先进先得"，没有排他等待者、没有轮转，公平性完全交给调度器。`ringbuf_multi_test` 的分布：1×3 时 640/666/740（≈1.16:1），2×2 时跨轮次在 ≈1.6:1 ~ ≈2.5:1 之间波动（无饿死）。若要提供公平性承诺，需要引入 `wake_up_interruptible_nr` 批量唤醒 + 排他等待者，并验证不跳过队尾的 `poll` 订阅者。
+- **通知合并（水位线）与老化**：计数已经说明当前负载下几乎没有唤醒放大可省（274,714 次通知仅遇 6 人次等待者；时间线窗口里只有 0.16% 的通知遇上等待者），因此收益必须用"多消费者 + 小块写"验证——`ringbuf_multi_test` 已经提供该拓扑与无水位线基线（分布、总通知次数可从计数取）；届时还要处理"被抑制的通知不能无限期丢失"，即尾块老化（`delayed_work`，开启水位线后亚水位线数据的唤醒延迟上限等于它）。
+- **多线程（pthread）拓扑未测**：目前所有并发用例要么 `fork` + 各自 `open()`（`ringbuf_sync_test`、`ringbuf_multi_test`），要么 `fork` 继承同一个 `struct file`（`bench`）。同进程多线程共享同一 `struct file` 的拓扑没测过，`fasync` 的 per-file 语义在多线程下也值得一看。
+- **时间线的调度归因未做**：只采了 ringbuf 事件，"排队是被调度还是被锁拖住"还没答案。用 `sudo bash scripts/trace-ringbuf.sh --with-sched` 复采，把 `park→complete` 与 `sched_switch`/`sched_wakeup` 对齐；必要时再加 `mutex_lock`/`contention_*` 事件看锁等待。
+- **深度退化的隔离实验**：主机制已由时间线给出（对面单线程逐个服务、每请求约 75 µs），但"工作集超 cache""部分完成的碎片请求""调度抖动"三个次要因素仍未逐条隔离。建议固定 1 MiB 块，单独扫深度 1/2/4/8/16/32，把服务时长（相邻 `serve`/`complete` 的时间差）与排队时长分开看。
+- **计数自身的开销未分离**：`this_cpu_inc` 是单指令，理论上开销在纳秒级，但无法从 10 ~ 78% 的运行间离散度中分离出来。要回答"计数是否真的无影响"，需要一个 `static_branch` 统计开关做 A/B。
+- **procfs 只做只读**（刻意设计）：如果后续要暴露"重置统计""强制唤醒"之类的操作，应先考虑 `ioctl`，而不是给 procfs 加写接口。
+- **异步机制原理**：`kiocb` 生命周期、`-EIOCBQUEUED` 契约、取消钩子、`fasync` 与 `io_uring` 的关系，见 `char-driver-async-io.md`（源码级整理，实测数据以本文为准）。
+
+### 已补齐：当初列在缺口里、现在有测试与结论的项
+
+| 原缺口 | 现在由谁覆盖 | 结论 |
+|---|---|---|
+| 缓冲区满时的非阻塞写 `-EAGAIN` | `ringbuf_api_test` [4] | 返回 `-EAGAIN` 且 `used` 不变 |
+| 阻塞 `read`/`write` 的跨进程唤醒断言 | `ringbuf_sync_test` [1][2] | 200 / 201 ms 唤醒，且必须睡够父进程延时 |
+| 异步写方向无断言 | `ringbuf_aio_flow_test` [6] | `park_write +4`、按提交顺序完成、级联内容一致 |
+| 多请求完成顺序无断言 | `ringbuf_aio_flow_test` [1][2] | 完成顺序 = 提交顺序（按 `aio_data` 判定） |
+| `io_uring` 是否走同一条异步路径 | `ringbuf_uring_test` | **不走**：首次 NOWAIT 尝试失败后挂到 `.poll` 上、就绪后重试走同步核 |
+| `release()` 取消路径是否可达 | `ringbuf_release_test` | **不可达**（`fasync` 探针证明 release 未执行 + 完成时链表已空） |
+| 多进程独立 `open` 的共享流拓扑 | `ringbuf_multi_test` | 三种拓扑不丢不重、同生产者内顺序严格递增；分布见上 |
+| `count == 0` / 超容量 / `-ESPIPE` / `-EFAULT` | `ringbuf_api_test` | 全部符合契约；其中 `count == 0` 曾暴露真缺陷并已修 |
